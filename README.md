@@ -78,14 +78,6 @@ JMComic/
 
 ```
 
-### 打包 EXE
-
-```bash
-python build_exe.py
-```
-
-生成的 exe 文件位于 `dist/JMComic下载器.exe`
-
 ## 依赖库
 
 - [ttkbootstrap](https://github.com/israel-dryer/ttkbootstrap) - 现代化 Tkinter 主题
