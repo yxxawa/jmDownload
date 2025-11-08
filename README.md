@@ -75,11 +75,7 @@ API:https://github.com/hect0x7/JMComic-Crawler-Python
 ```
 JMComic/
 ├── jmcomic_gui.py      # 主程序文件
-├── build_exe.py        # 打包脚本
-├── run_gui.py          # 启动脚本
-├── option_example.yml  # 配置示例文件
-├── README.md           # 说明文档
-└── 启动程序.bat        # Windows 启动脚本
+
 ```
 
 ### 打包 EXE
