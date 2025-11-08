@@ -72,7 +72,7 @@ API:https://github.com/hect0x7/JMComic-Crawler-Python
 
 ```
 JMComic/
-├── jmcomic_gui.py      # 主程序文件
+├── jmcomic.py      # 主程序文件
 
 ```
 
