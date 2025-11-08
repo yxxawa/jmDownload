@@ -1,4 +1,4 @@
-# 🔞JMComic 下载器🔞
+# JMComic漫画 下载器
 
 JMComic 下载器是一个基于 Python 和 Tkinter 开发的图形界面工具，用于下载 JMComic 网站的漫画内容。
 API:https://github.com/hect0x7/JMComic-Crawler-Python
