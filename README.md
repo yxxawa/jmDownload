@@ -2,8 +2,6 @@
 
 JMComic 下载器是一个基于 Python 和 Tkinter 开发的图形界面工具，用于下载 JMComic 网站的漫画内容。
 API:https://github.com/hect0x7/JMComic-Crawler-Python
-## 界面
-![image](https://github.com/yxxawa/jmDownload/blob/main/%E7%A4%BA%E4%BE%8B%E5%9B%BE%E7%89%87/%E7%A4%BA%E4%BE%8B.png)
 ## 功能特性
 
 -  **图形界面**: 基于 ttkbootstrap 的现代化 Windows 11 风格界面
