@@ -37,11 +37,10 @@
 
 Release 包按架构区分：
 
-- `JMComicDesktop-win-x64.zip`
-- `JMComicDesktop-win-x86.zip`
-- `JMComicDesktop-win-arm64.zip`
+- `JMComicDesktop-win-x64.exe`
+- `JMComicDesktop-win-x86.exe`
+- `JMComicDesktop-win-arm64.exe`
 
-解压后运行 `DesktopShell.exe`。
 
 目标电脑需要安装：
 
