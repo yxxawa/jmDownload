@@ -2,6 +2,8 @@
 
 一个偏实用、少折腾的 JMComic Windows 桌面客户端。  
 能搜、能看榜、能批量下，重点是下载结果可以直接变成你想要的格式。
+<img width="1897" height="1295" alt="QQ20260512-120020" src="https://github.com/user-attachments/assets/63e366ec-980b-4977-b197-65e8164d2b16" />
+<img width="1079" height="692" alt="QQ20260512-120036" src="https://github.com/user-attachments/assets/74e3650a-2bce-4afd-b1c4-0d144d8e9c46" />
 
 ## 下载格式
 
