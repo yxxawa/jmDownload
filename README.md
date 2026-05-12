@@ -1,21 +1,35 @@
 # JMComic Desktop
 
 一个偏实用、少折腾的 JMComic Windows 桌面客户端。  
-能搜、能看榜、能批量下，重点是下载结果可以直接变成你想要的格式。
-<img width="1897" height="1295" alt="QQ20260512-120020" src="https://github.com/user-attachments/assets/63e366ec-980b-4977-b197-65e8164d2b16" />
-<img width="1079" height="692" alt="QQ20260512-120036" src="https://github.com/user-attachments/assets/74e3650a-2bce-4afd-b1c4-0d144d8e9c46" />
+支持搜索、榜单、批量下载，并能把下载结果保存为 **图片目录 / ZIP / PDF**。
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/63e366ec-980b-4977-b197-65e8164d2b16" alt="JMComic Desktop 主界面" width="720">
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/74e3650a-2bce-4afd-b1c4-0d144d8e9c46" alt="JMComic Desktop 下载设置" width="520">
+</p>
+
+## 亮点
+
+- 搜索漫画，查看日榜、周榜、月榜
+- 支持本子 ID 和章节 ID 批量下载
+- 下载格式支持 **图片目录 / ZIP / PDF**
+- PDF 支持多章节合并或按章节分开
+- 已有图片、ZIP、PDF 时尽量复用转换，减少重复下载
+- 下载队列、任务状态、日志面板、下载记录
+- C# 原生后端，不带 Python
 
 ## 下载格式
 
-支持三种输出：
-
 | 格式 | 适合场景 |
 | --- | --- |
-| 图片目录 | 想保留原始分页，方便二次整理、压缩或导入其他工具 |
-| ZIP | 想要一个干净的压缩包，方便归档、转移和备份 |
-| PDF | 想直接用阅读器打开，或者放到平板/电子设备上看 |
+| 图片目录 | 保留原始分页，方便二次整理、压缩或导入其他工具 |
+| ZIP | 得到一个干净的压缩包，方便归档、转移和备份 |
+| PDF | 直接用阅读器打开，或者放到平板、电子设备上看 |
 
-格式复用也做了：
+格式复用：
 
 - 已经有图片目录，可以直接打包成 ZIP 或 PDF。
 - 已经有 ZIP，可以转成图片目录或 PDF。
@@ -24,25 +38,13 @@
 
 默认下载到程序同目录下的 `JMDownLoad`。
 
-## 功能
-
-- 关键词搜索
-- 日榜、周榜、月榜
-- 批量下载本子 ID 或章节 ID
-- 图片目录 / ZIP / PDF 输出
-- PDF 支持多章节合并或按章节分开
-- 下载队列、任务状态、日志面板
-- 下载记录和已下载资源索引
-- C# 原生后端，不带 Python
-
 ## 获取 Release
 
-Release 包按架构区分：
+按系统架构下载对应版本：
 
 - `JMComicDesktop-win-x64.exe`
 - `JMComicDesktop-win-x86.exe`
 - `JMComicDesktop-win-arm64.exe`
-
 
 目标电脑需要安装：
 
