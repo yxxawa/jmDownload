@@ -4,12 +4,11 @@
 
 <div align="center">
 
-![Platform](https://img.shields.io/badge/Windows-x64%20%7C%20arm64-0078d4?style=flat-square&logo=windows11&logoColor=white)
+![Platform](https://img.shields.io/badge/Windows-x64%20%7C%20x86%20%7C%20arm64-0078d4?style=flat-square&logo=windows11&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-9.0-512bd4?style=flat-square&logo=dotnet&logoColor=white)
 ![WPF](https://img.shields.io/badge/UI-WPF-68217a?style=flat-square)
 ![WebView2](https://img.shields.io/badge/WebView2-Required-0078d4?style=flat-square&logo=microsoftedge&logoColor=white)
 ![Backend](https://img.shields.io/badge/Backend-C%23-239120?style=flat-square&logo=csharp&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 **一个偏实用、少折腾的 JMComic Windows 桌面客户端。**  
 能搜、能看榜、能批量下，也能把下载结果整理成你想要的格式。
@@ -23,38 +22,28 @@
 <table align="center">
   <tr>
     <td align="center" width="58%">
-      <img src="https://github.com/user-attachments/assets/63e366ec-980b-4977-b197-65e8164d2b16" width="100%" alt="JMComic Desktop 主界面"/>
+      <img width="1902" height="1281" alt="4560c64c-33c6-4304-86a5-edb25491f355" src="https://github.com/user-attachments/assets/5eeb9d1d-8f10-47ac-9db2-8af8b56ee8b9" />
       <sub>主界面</sub>
-    </td>
-    <td align="center" width="42%">
-      <img src="https://github.com/user-attachments/assets/74e3650a-2bce-4afd-b1c4-0d144d8e9c46" width="100%" alt="JMComic Desktop 下载设置"/>
-      <sub>下载设置</sub>
     </td>
   </tr>
 </table>
-
----
 
 ## 下载格式
 
 支持三种输出，按使用场景直接选：
 
-<div align="center">
-
 | 格式 | 适合场景 |
-|:---:|:---|
-| 🖼️ **图片目录** | 保留原始分页，方便二次整理、压缩或导入其他工具 |
-| 📦 **ZIP** | 得到一个干净的压缩包，方便归档、转移和备份 |
-| 📄 **PDF** | 直接用阅读器打开，或者放到平板、电子设备上看 |
-
-</div>
+|:---|:---|
+| **图片目录** | 保留原始分页，方便二次整理、压缩或导入其他工具 |
+| **ZIP** | 得到一个干净的压缩包，方便归档、转移和备份 |
+| **PDF** | 直接用阅读器打开，或者放到平板、电子设备上看 |
 
 格式复用也做了：
 
-- 已有图片目录 → 直接打包成 ZIP 或 PDF
-- 已有 ZIP → 转成图片目录或 PDF
-- 已有 PDF → 提取为图片目录或转 ZIP
-- 目标格式已存在时会跳过重复下载
+- 已有图片目录，可以直接打包成 ZIP 或 PDF。
+- 已有 ZIP，可以转成图片目录或 PDF。
+- 已有 PDF，可以提取为图片目录或转 ZIP。
+- 目标格式已存在时会跳过重复下载。
 
 默认下载到程序同目录下的 `JMDownLoad`。
 
@@ -62,60 +51,44 @@
 
 ## 功能特性
 
-<table>
-  <tr>
-    <td valign="top" width="33%">
-      <h3>🔍 搜索与榜单</h3>
-      <ul>
-        <li>关键词搜索</li>
-        <li>日榜、周榜、月榜</li>
-        <li>支持本子 ID 和章节 ID</li>
-      </ul>
-    </td>
-    <td valign="top" width="33%">
-      <h3>⬇️ 下载与队列</h3>
-      <ul>
-        <li>批量下载</li>
-        <li>图片目录 / ZIP / PDF 输出</li>
-        <li>PDF 支持多章节合并或按章节分开</li>
-        <li>下载队列、任务状态、日志面板</li>
-      </ul>
-    </td>
-    <td valign="top" width="33%">
-      <h3>📁 记录与复用</h3>
-      <ul>
-        <li>下载记录</li>
-        <li>已下载资源索引</li>
-        <li>已有格式复用转换，减少重复下载</li>
-      </ul>
-    </td>
-  </tr>
-  <tr>
-    <td valign="top" colspan="3">
-      <h3>⚙️ 运行方式</h3>
-      <ul>
-        <li>C# 原生后端，无需 Python</li>
-        <li>WPF + WebView2 界面</li>
-        <li>单文件 EXE，开箱即用</li>
-      </ul>
-    </td>
-  </tr>
-</table>
+**搜索与榜单**
+
+- 关键词搜索
+- 日榜、周榜、月榜
+- 支持本子 ID 和章节 ID
+
+**下载与队列**
+
+- 批量下载
+- 图片目录 / ZIP / PDF 输出
+- PDF 支持多章节合并或按章节分开
+- 下载队列、任务状态、日志面板
+
+**记录与复用**
+
+- 下载记录
+- 已下载资源索引
+- 已有格式复用转换，减少重复下载
+
+**运行方式**
+
+- C# 原生后端
+- WPF + WebView2 界面
+- 不带 Python 后端
 
 ---
 
 ## 获取 Release
 
-<div align="center">
+按系统架构下载对应版本：
 
-| 架构 | 下载 |
-|:---:|:---:|
-| ![x64](https://img.shields.io/badge/x64-0078d4?style=flat-square&logo=windows11&logoColor=white) | `JMDownload-win-x64.exe` |
-| ![arm64](https://img.shields.io/badge/arm64-0078d4?style=flat-square&logo=windows11&logoColor=white) | `JMDownload-win-arm64.exe` |
+| 架构 | 文件 |
+|:---|:---|
+| x64 | `JMComicDesktop-win-x64.zip` |
+| x86 | `JMComicDesktop-win-x86.zip` |
+| arm64 | `JMComicDesktop-win-arm64.zip` |
 
-</div>
-
-直接运行 EXE，无需解压，无需安装。
+解压后运行 `DesktopShell.exe`。
 
 ---
 
@@ -124,7 +97,7 @@
 | 环境 | 要求 |
 |:---|:---|
 | 开发运行 | Windows、.NET 9 SDK、WebView2 Runtime |
-| 发布版运行 | Windows x64 / arm64、.NET 9 Desktop Runtime、WebView2 Runtime |
+| 发布版运行 | Windows x64 / x86 / arm64、.NET 9 Desktop Runtime、WebView2 Runtime |
 
 > WebView2 Runtime 通常已预装于 Windows 11。若缺失，可从 Microsoft 官方页面安装。
 
@@ -140,10 +113,10 @@ dotnet build DesktopShell\DesktopShell.csproj
 dotnet run --project DesktopShell\DesktopShell.csproj
 
 # 发布单文件 EXE，非自包含，win-x64
-dotnet publish DesktopShell\DesktopShell.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+dotnet publish DesktopShell\DesktopShell.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-把 `win-x64` 换成 `win-arm64` 可以生成对应架构。
+把 `win-x64` 换成 `win-x86` 或 `win-arm64` 可以生成对应架构。
 
 ---
 
