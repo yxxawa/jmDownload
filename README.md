@@ -1,17 +1,30 @@
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=18&height=180&section=header&text=JMComic%20Desktop&fontSize=48&fontColor=fff&animation=fadeIn&fontAlignY=38&desc=%E6%BC%AB%E7%94%BB%E4%B8%8B%E8%BD%BD%E4%B8%8E%E6%A0%BC%E5%BC%8F%E8%BD%AC%E6%8D%A2%E5%B7%A5%E5%85%B7&descAlignY=58&descSize=16" width="100%"/>
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=3d8c40,5aac44,3d8c40&height=12&section=header" width="100%"/>
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=8B6914,6B4F12,8B6914&height=8&section=header" width="100%"/>
+</p>
+
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=22&pause=1000&color=5aac44&center=true&vCenter=true&width=600&height=70&lines=JMComic+Desktop" alt="Title"/>
+</p>
+
+<p align="center">
+  <img src="https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=10&pause=2000&color=c8a96e&center=true&vCenter=true&width=600&lines=%E6%BC%AB%E7%94%BB%E4%B8%8B%E8%BD%BD+%26+%E6%A0%BC%E5%BC%8F%E8%BD%AC%E6%8D%A2%E5%B7%A5%E5%85%B7" alt="Subtitle"/>
+</p>
+
+<p align="center">
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=8B6914,6B4F12,8B6914&height=8&section=header" width="100%"/>
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=3d8c40,5aac44,3d8c40&height=12&section=header" width="100%"/>
 </p>
 
 <div align="center">
 
-<a href="https://github.com/your-repo/stargazers"><img src="https://img.shields.io/github/stars/your-repo?style=flat-square&color=ffd700&logo=github" alt="Stars"/></a>
-![Platform](https://img.shields.io/badge/Windows-x64%20%7C%20arm64-0078d4?style=flat-square&logo=windows11&logoColor=white)
-![.NET](https://img.shields.io/badge/.NET-9.0-512bd4?style=flat-square&logo=dotnet&logoColor=white)
-![WPF](https://img.shields.io/badge/UI-WPF-68217a?style=flat-square)
-![WebView2](https://img.shields.io/badge/WebView2-Required-0078d4?style=flat-square&logo=microsoftedge&logoColor=white)
-![Backend](https://img.shields.io/badge/Backend-C%23-239120?style=flat-square&logo=csharp&logoColor=white)
+<a href="https://github.com/your-repo/stargazers"><img src="https://img.shields.io/github/stars/your-repo?style=for-the-badge&color=5aac44&logo=github&logoColor=white" alt="Stars"/></a>
+![Platform](https://img.shields.io/badge/Windows-x64%20%7C%20arm64-3d8c40?style=for-the-badge&logo=windows11&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-9.0-6B4F12?style=for-the-badge&logo=dotnet&logoColor=white)
+![WPF](https://img.shields.io/badge/UI-WPF-8B6914?style=for-the-badge)
+![Backend](https://img.shields.io/badge/Backend-C%23-5aac44?style=for-the-badge&logo=csharp&logoColor=white)
 
-<img src="https://readme-typing-svg.demolab.com?font=Fira+Code&size=16&pause=1000&color=A78BFA&center=true&vCenter=true&width=500&lines=%E6%90%9C%E7%B4%A2+%2F+%E6%A6%9C%E5%8D%95+%2F+%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BD+%2F+%E6%A0%BC%E5%BC%8F%E8%BD%AC%E6%8D%A2;%E5%9B%BE%E7%89%87%E7%9B%AE%E5%BD%95+%E2%86%94+ZIP+%E2%86%94+PDF+%E9%9A%8F%E6%84%8F%E8%BD%AC;C%23+%E5%8E%9F%E7%94%9F%E5%90%8E%E7%AB%AF%EF%BC%8C%E4%B8%8D%E4%BE%9D%E8%B5%96+Python" alt="Typing SVG"/>
+<img src="https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=11&pause=1200&color=c8a96e&center=true&vCenter=true&width=560&lines=%E6%90%9C%E7%B4%A2+%2F+%E6%A6%9C%E5%8D%95+%2F+%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BD+%2F+%E6%A0%BC%E5%BC%8F%E8%BD%AC%E6%8D%A2;%E5%9B%BE%E7%89%87%E7%9B%AE%E5%BD%95+%3C%3D%3E+ZIP+%3C%3D%3E+PDF;C%23+%E5%8E%9F%E7%94%9F%E5%90%8E%E7%AB%AF%EF%BC%8C%E4%B8%8D%E4%BE%9D%E8%B5%96+Python" alt="Typing SVG"/>
 
 **一个偏实用、少折腾的 JMComic Windows 桌面客户端。**  
 能搜、能看榜、能批量下，也能把下载结果整理成你想要的格式。
@@ -197,5 +210,6 @@ JMComicDesktop/
 本项目仅供学习交流使用。下载内容版权归原作者所有，请尊重版权并合理使用。
 
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=18&height=100&section=footer&text=Have%20fun%20downloading&fontSize=18&fontColor=fff&animation=fadeIn" width="100%"/>
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=3d8c40,5aac44,3d8c40&height=12&section=footer" width="100%"/>
+  <img src="https://capsule-render.vercel.app/api?type=rect&color=8B6914,6B4F12,8B6914&height=8&section=footer" width="100%"/>
 </p>
