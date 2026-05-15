@@ -22,12 +22,8 @@
 <table align="center">
   <tr>
     <td align="center" width="58%">
-      <img src="https://github.com/user-attachments/assets/63e366ec-980b-4977-b197-65e8164d2b16" width="100%" alt="JMComic Desktop 主界面"/>
+      <img width="1902" height="1281" alt="4560c64c-33c6-4304-86a5-edb25491f355" src="https://github.com/user-attachments/assets/5eeb9d1d-8f10-47ac-9db2-8af8b56ee8b9" />
       <sub>主界面</sub>
-    </td>
-    <td align="center" width="42%">
-      <img src="https://github.com/user-attachments/assets/74e3650a-2bce-4afd-b1c4-0d144d8e9c46" width="100%" alt="JMComic Desktop 下载设置"/>
-      <sub>下载设置</sub>
     </td>
   </tr>
 </table>
