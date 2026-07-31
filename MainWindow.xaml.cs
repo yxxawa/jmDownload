@@ -54,9 +54,25 @@ public partial class MainWindow : Window
             "JMComicDesktop", "WebView2");
         var env = await CoreWebView2Environment.CreateAsync(userDataFolder: folder);
         await Browser.EnsureCoreWebView2Async(env);
+        Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 243, 245, 242);
         _webViewBridge = new WebViewBridge();
         await _webViewBridge.ConfigureAsync(Browser.CoreWebView2, token, this);
+
+        StatusText.Text = "正在加载工作区...";
+        DetailText.Text = "界面资源已就绪，正在建立本地连接";
+        var navigationReady = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
+        void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs args)
+            => navigationReady.TrySetResult(args);
+
+        Browser.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         Browser.Source = baseUri;
+        var navigation = await navigationReady.Task.WaitAsync(TimeSpan.FromSeconds(20));
+        Browser.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+        if (!navigation.IsSuccess)
+        {
+            throw new InvalidOperationException($"界面加载失败：{navigation.WebErrorStatus}");
+        }
+
         Browser.Visibility = Visibility.Visible;
         StartupPanel.Visibility = Visibility.Collapsed;
     }

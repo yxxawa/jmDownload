@@ -9,9 +9,14 @@ public sealed class WebViewBridge
 
     public async Task ConfigureAsync(CoreWebView2 webView, string token, Window owner)
     {
-        webView.Settings.AreDefaultContextMenusEnabled = true;
+        webView.Settings.AreDefaultContextMenusEnabled = false;
+#if DEBUG
         webView.Settings.AreDevToolsEnabled = true;
+#else
+        webView.Settings.AreDevToolsEnabled = false;
+#endif
         webView.Settings.IsStatusBarEnabled = false;
+        webView.Settings.IsZoomControlEnabled = true;
 
         await webView.AddScriptToExecuteOnDocumentCreatedAsync(
             "window.__JMDOWNLOAD_TOKEN__ = " + System.Text.Json.JsonSerializer.Serialize(token) + ";" +

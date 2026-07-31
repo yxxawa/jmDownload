@@ -92,6 +92,8 @@
 <br>
 
 - 关键词搜索
+- 搜索结果排序：最新、浏览量、页数、收藏量
+- 搜索时间筛选：全部、今天、本周、本月
 - 日榜、周榜、月榜
 - 支持本子 ID 和章节 ID
 
@@ -164,13 +166,13 @@
 
 ```powershell
 # 构建
-dotnet build DesktopShell\DesktopShell.csproj
+dotnet build DesktopShell.csproj -c Release
 
 # 运行
-dotnet run --project DesktopShell\DesktopShell.csproj
+dotnet run --project DesktopShell.csproj
 
 # 发布单文件 EXE，非自包含，win-x64
-dotnet publish DesktopShell\DesktopShell.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+dotnet publish DesktopShell.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
 ```
 
 把 `win-x64` 换成 `win-arm64` 可以生成对应架构。
@@ -189,8 +191,8 @@ dotnet publish DesktopShell\DesktopShell.csproj -c Release -r win-x64 --self-con
 
 | 文件 / 目录 | 说明 |
 |:---|:---|
-| `JMDownLoad/` | 默认下载目录 |
-| `config.json` | 程序配置 |
+| `程序目录/JMDownLoad/` | 默认下载目录 |
+| `%LOCALAPPDATA%/JMComicDesktop/config.json` | 程序配置 |
 | `.jmdownload_index.json` | 已下载资源索引 |
 | 日志文件 | 运行和下载日志 |
 
@@ -204,9 +206,11 @@ dotnet publish DesktopShell\DesktopShell.csproj -c Release -r win-x64 --self-con
 
 ```text
 jmDownload/
-├── DesktopShell/                 WPF + WebView2 桌面壳
-│   └── NativeBackend/            C# 原生 JMComic 后端
-└── frontend/                     WebView 前端页面
+├── NativeBackend/                C# 原生 JMComic 后端
+├── frontend/                     WebView 前端页面
+├── assets/                       README 与界面资源
+├── MainWindow.xaml               WPF + WebView2 桌面壳
+└── DesktopShell.csproj           .NET 项目入口
 ```
 
 <p align="center"><img src="assets/divider.svg" width="100%"/></p>

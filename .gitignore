@@ -1,0 +1,38 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Pp]ublish/
+TestResults/
+
+# IDE and user-specific files
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Temporary files and logs
+.ui-test/
+*.log
+*.tmp
+*.temp
+*.bak
+*.cache
+
+# Runtime data
+/JMDownLoad/
+/config.json
+**/.jmdownload_index.json
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini

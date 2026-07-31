@@ -22,6 +22,16 @@ public sealed class NativeBackendServer : IAsyncDisposable
     private readonly NativeDownloadManager _downloadManager;
     private Task? _listenTask;
 
+    private static readonly HashSet<string> SearchOrders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "mr", "mv", "mp", "tf",
+    };
+
+    private static readonly HashSet<string> SearchTimes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "a", "t", "w", "m",
+    };
+
     public NativeBackendServer()
     {
         ProjectRoot = ResolveProjectRoot();
@@ -208,19 +218,36 @@ public sealed class NativeBackendServer : IAsyncDisposable
         if (request.HttpMethod == "GET" && path == "/api/search")
         {
             var query = request.QueryString["q"] ?? string.Empty;
-            var page = int.TryParse(request.QueryString["page"], out var pageValue) ? pageValue : 1;
-            var mainTag = int.TryParse(request.QueryString["main_tag"], out var tagValue) ? tagValue : 0;
+            var page = int.TryParse(request.QueryString["page"], out var pageValue) ? Math.Max(1, pageValue) : 1;
+            var mainTag = int.TryParse(request.QueryString["main_tag"], out var tagValue) ? Math.Max(0, tagValue) : 0;
+            var orderBy = (request.QueryString["sort"] ?? request.QueryString["o"] ?? "mr").Trim().ToLowerInvariant();
+            var time = (request.QueryString["time"] ?? request.QueryString["t"] ?? "a").Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(query))
             {
                 await WriteJsonAsync(response, 400, new { detail = "q is required" }).ConfigureAwait(false);
                 return;
             }
 
-            var items = await _client.SearchAsync(query, page, cancellationToken, mainTag).ConfigureAwait(false);
+            if (!SearchOrders.Contains(orderBy))
+            {
+                await WriteJsonAsync(response, 400, new { detail = "sort must be one of: mr, mv, mp, tf" }).ConfigureAwait(false);
+                return;
+            }
+
+            if (!SearchTimes.Contains(time))
+            {
+                await WriteJsonAsync(response, 400, new { detail = "time must be one of: a, t, w, m" }).ConfigureAwait(false);
+                return;
+            }
+
+            var items = await _client.SearchAsync(query, page, cancellationToken, mainTag, orderBy, time).ConfigureAwait(false);
             await WriteJsonAsync(response, 200, new
             {
                 items,
                 page,
+                sort = orderBy,
+                time,
+                main_tag = mainTag,
                 has_next = items.Count > 0,
             }).ConfigureAwait(false);
             return;
@@ -248,6 +275,7 @@ public sealed class NativeBackendServer : IAsyncDisposable
             var bytes = await _client.DownloadCoverAsync(albumId, cancellationToken).ConfigureAwait(false);
             response.StatusCode = 200;
             response.ContentType = "image/jpeg";
+            response.Headers["Cache-Control"] = "private, max-age=86400";
             response.ContentLength64 = bytes.Length;
             await response.OutputStream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
             response.Close();
@@ -465,7 +493,16 @@ public sealed class NativeBackendServer : IAsyncDisposable
             return true;
         }
 
-        return request.Headers["Authorization"] == "Bearer " + Token;
+        if (request.Headers["Authorization"] == "Bearer " + Token)
+        {
+            return true;
+        }
+
+        // Browser image elements cannot attach the API Authorization header.
+        // Permit the local cover endpoint to use the same short-lived token in
+        // its query string so covers can begin loading immediately.
+        return request.Url?.AbsolutePath.StartsWith("/api/cover/", StringComparison.Ordinal) == true
+               && request.QueryString["token"] == Token;
     }
 
     private static bool RequiresAuth(string? path)

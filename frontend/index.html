@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>JM Download</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v2h14v-2"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1V21h-4v-.09A1.7 1.7 0 0 0 8.55 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.55a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1V3h4v.09A1.7 1.7 0 0 0 15.45 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.12.39.33.73.6 1 .28.27.63.4 1 .4h.09v4H21a1.7 1.7 0 0 0-1.6.6Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3V7Z"/><path d="M3 7V5h7l2 2"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 13v6H5V6h6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7"/><path d="M10 11v5m4-5v5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14m8-14v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5H5v11h3"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 4-4 3 3 3-4 6 6"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 7h16v13H4V7Zm-1-3h18v3H3V4Z"/><path d="M9 11h6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v5h5M9 13h6m-6 4h6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.3 4.1L17 9l-3.7 1.9L12 15l-1.3-4.1L7 9l3.7-1.9L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+  </svg>
+
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand" title="JM Download">
+        <div class="brand-mark"><span>J</span></div>
+        <div class="brand-copy"><strong>JM Download</strong><small>漫画整理工具</small></div>
+      </div>
+
+      <nav class="main-nav">
+        <button class="nav-item is-active" data-view="discover" aria-current="page">
+          <svg><use href="#i-compass"/></svg><span>发现</span>
+        </button>
+        <button class="nav-item" data-view="queue">
+          <span class="nav-icon-wrap"><svg><use href="#i-download"/></svg><i id="queueBadge" hidden></i></span><span>任务</span>
+        </button>
+        <button class="nav-item" data-view="history">
+          <svg><use href="#i-clock"/></svg><span>记录</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="connection-card" id="connectionCard">
+          <span class="connection-dot"></span>
+          <div><strong id="connectionText">正在连接</strong><small>C# 原生服务</small></div>
+        </div>
+        <button class="nav-item" id="settingsButton">
+          <svg><use href="#i-settings"/></svg><span>偏好设置</span>
+        </button>
+        <button class="nav-item" id="themeToggle" aria-label="切换主题">
+          <svg class="theme-icon-light"><use href="#i-sun"/></svg>
+          <svg class="theme-icon-dark"><use href="#i-moon"/></svg>
+          <span id="themeLabel">深色模式</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <section class="view is-active" id="view-discover">
+        <header class="page-header discover-header">
+          <div>
+            <div class="eyebrow"><svg><use href="#i-spark"/></svg> 精简流程 · 安静下载</div>
+            <h1>找到想看的，<span>剩下交给队列。</span></h1>
+            <p>搜索作品、浏览榜单，或直接粘贴多个 ID。设置会自动记住。</p>
+          </div>
+          <button class="icon-button planner-toggle" id="plannerToggleTop" title="打开下载清单">
+            <svg><use href="#i-list"/></svg><span id="plannerToggleCount">0</span>
+          </button>
+        </header>
+
+        <form class="search-box" id="searchForm">
+          <svg class="search-leading"><use href="#i-search"/></svg>
+          <input id="searchInput" autocomplete="off" spellcheck="false" placeholder="搜索标题、作者或输入作品 ID" aria-label="搜索" />
+          <kbd>Ctrl K</kbd>
+          <button type="button" class="search-batch" id="batchButton"><svg><use href="#i-plus"/></svg>批量 ID</button>
+          <button class="primary-button search-submit" type="submit"><span>搜索</span><svg><use href="#i-chevron"/></svg></button>
+        </form>
+
+        <div class="recent-row" id="recentRow" hidden>
+          <span>最近</span><div id="recentSearches"></div>
+        </div>
+
+        <div class="search-controls" id="searchControls" hidden>
+          <div class="search-control-group">
+            <span class="search-control-label"><svg><use href="#i-list"/></svg>排序</span>
+            <div class="search-sort-tabs" id="searchSortTabs" role="group" aria-label="搜索结果排序">
+              <button class="is-active" data-search-sort="mr">最新</button>
+              <button data-search-sort="mv">浏览</button>
+              <button data-search-sort="mp">页数</button>
+              <button data-search-sort="tf">收藏</button>
+            </div>
+          </div>
+          <label class="search-time-filter">
+            <span><svg><use href="#i-clock"/></svg>时间</span>
+            <select id="searchTimeSelect" aria-label="搜索时间范围">
+              <option value="a">全部时间</option>
+              <option value="t">今天</option>
+              <option value="w">本周</option>
+              <option value="m">本月</option>
+            </select>
+          </label>
+          <button class="search-filter-reset" id="resetSearchFilters" type="button" hidden>恢复默认</button>
+        </div>
+
+        <div class="content-head">
+          <div>
+            <h2 id="contentTitle">热门榜单</h2>
+            <p id="contentSubtitle">看看最近大家都在下载什么</p>
+          </div>
+          <div class="toolbar-actions">
+            <div class="ranking-tabs" id="rankingTabs" role="tablist">
+              <button class="is-active" data-rank="day">今日</button>
+              <button data-rank="week">本周</button>
+              <button data-rank="month">本月</button>
+            </div>
+            <button class="icon-button" id="refreshButton" title="刷新"><span class="refresh-glyph">↻</span></button>
+          </div>
+        </div>
+
+        <div class="result-state" id="resultState" hidden></div>
+        <div class="album-grid" id="albumGrid" aria-live="polite"></div>
+        <div class="load-more-wrap" id="loadMoreWrap" hidden>
+          <button class="secondary-button" id="loadMoreButton">加载更多</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-queue">
+        <header class="page-header compact-header">
+          <div>
+            <div class="eyebrow"><span class="live-dot"></span> 实时任务中心</div>
+            <h1>下载任务</h1>
+            <p>队列、进度和错误都集中在这里，不再被日志淹没。</p>
+          </div>
+          <div class="header-actions">
+            <button class="secondary-button" id="openRootButton"><svg><use href="#i-folder"/></svg>打开目录</button>
+            <button class="danger-button" id="stopAllButton" disabled><svg><use href="#i-pause"/></svg>停止全部</button>
+          </div>
+        </header>
+
+        <div class="stats-grid">
+          <article class="stat-card"><span>队列总数</span><strong id="statTotal">0</strong><small>本轮任务</small></article>
+          <article class="stat-card accent"><span>正在处理</span><strong id="statRunning">0</strong><small id="runningName">暂无任务</small></article>
+          <article class="stat-card success"><span>已完成</span><strong id="statSuccess">0</strong><small>成功保存</small></article>
+          <article class="stat-card danger"><span>异常</span><strong id="statFailed">0</strong><small>可重新加入</small></article>
+        </div>
+
+        <div class="queue-layout">
+          <section class="panel queue-panel">
+            <div class="panel-heading"><div><h2>任务队列</h2><p id="queueSummary">队列目前为空</p></div><span class="status-pill neutral" id="queueStatePill">空闲</span></div>
+            <div class="task-list" id="taskList"></div>
+          </section>
+          <section class="panel log-panel">
+            <div class="panel-heading"><div><h2>活动记录</h2><p>仅保留关键事件，便于定位问题</p></div><button class="text-button" id="clearLogsButton">清空</button></div>
+            <div class="log-list" id="logList"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-history">
+        <header class="page-header compact-header">
+          <div>
+            <div class="eyebrow"><svg><use href="#i-clock"/></svg> 本机记录</div>
+            <h1>下载记录</h1>
+            <p>快速找回最近处理过的作品和保存目录。</p>
+          </div>
+          <button class="secondary-button" id="clearHistoryButton"><svg><use href="#i-trash"/></svg>清空记录</button>
+        </header>
+        <div class="history-filters">
+          <button class="filter-chip is-active" data-history-filter="all">全部</button>
+          <button class="filter-chip" data-history-filter="success">已完成</button>
+          <button class="filter-chip" data-history-filter="failed">异常</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+    </main>
+
+    <aside class="planner" id="planner" aria-label="下载清单">
+      <div class="planner-head">
+        <div><span class="section-kicker">DOWNLOAD PLAN</span><h2>下载清单 <em id="selectedCount">0</em></h2></div>
+        <div class="planner-head-actions"><button class="text-button" id="clearSelectedButton">清空</button><button class="icon-button planner-close" id="plannerClose"><svg><use href="#i-x"/></svg></button></div>
+      </div>
+
+      <div class="selection-empty" id="selectionEmpty">
+        <div class="empty-illustration"><svg><use href="#i-plus"/></svg></div>
+        <strong>还没有选择作品</strong>
+        <p>在榜单或搜索结果中点击“加入”，也可以批量粘贴 ID。</p>
+        <button class="secondary-button small" id="emptyBatchButton">批量添加 ID</button>
+      </div>
+      <div class="selected-list" id="selectedList"></div>
+
+      <div class="planner-settings">
+        <div class="setting-block">
+          <label class="setting-label">输出格式</label>
+          <div class="format-picker" id="formatPicker">
+            <button data-format="images" class="is-active"><svg><use href="#i-image"/></svg><span>图片</span></button>
+            <button data-format="zip"><svg><use href="#i-archive"/></svg><span>ZIP</span></button>
+            <button data-format="pdf"><svg><use href="#i-file"/></svg><span>PDF</span></button>
+          </div>
+        </div>
+
+        <div class="setting-block">
+          <div class="setting-label-row"><label class="setting-label" for="pathInput">保存位置</label><button class="text-button" id="openPathButton">打开</button></div>
+          <div class="path-field"><svg><use href="#i-folder"/></svg><input id="pathInput" aria-label="保存位置"/><button id="browseButton" title="选择目录">浏览</button></div>
+          <label class="switch-row"><span><strong>按作品自动分目录</strong><small>批量下载时保持文件整洁</small></span><input type="checkbox" id="autoPathInput" checked><i></i></label>
+        </div>
+
+        <details class="advanced-settings" id="advancedSettings">
+          <summary><span><svg><use href="#i-settings"/></svg>质量与并发</span><svg class="summary-chevron"><use href="#i-chevron"/></svg></summary>
+          <div class="advanced-body">
+            <label class="select-row"><span>图片格式</span><select id="imageFormatInput"><option value=".png">PNG</option><option value=".jpg">JPG</option><option value=".webp">WebP</option><option value="原始格式">保留原始格式</option></select></label>
+            <label class="select-row pdf-only" id="pdfModeRow"><span>PDF 章节</span><select id="pdfModeInput"><option value="merged">合并为一本</option><option value="separate">章节分开</option></select></label>
+            <label class="range-row"><span><b>图片并发</b><output id="imageThreadsValue">5</output></span><input id="imageThreadsInput" type="range" min="1" max="20" value="5"></label>
+            <label class="range-row"><span><b>作品并发</b><output id="albumThreadsValue">1</output></span><input id="albumThreadsInput" type="range" min="1" max="8" value="1"></label>
+          </div>
+        </details>
+      </div>
+
+      <div class="planner-footer">
+        <div class="save-state" id="saveState"><span></span>设置已同步</div>
+        <button class="download-button" id="startDownloadButton" disabled>
+          <span><svg><use href="#i-download"/></svg><b>开始下载</b></span>
+          <em>Ctrl Enter</em>
+        </button>
+        <p id="downloadHint">选择作品后即可开始</p>
+      </div>
+    </aside>
+  </div>
+
+  <button class="floating-plan-button" id="floatingPlanButton"><svg><use href="#i-download"/></svg><span>下载清单</span><em id="floatingPlanCount">0</em></button>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden></div>
+
+  <section class="modal detail-modal" id="detailModal" role="dialog" aria-modal="true" aria-labelledby="detailTitle" hidden>
+    <button class="modal-close" data-close-modal><svg><use href="#i-x"/></svg></button>
+    <div id="detailContent"></div>
+  </section>
+
+  <section class="modal batch-modal" id="batchModal" role="dialog" aria-modal="true" aria-labelledby="batchTitle" hidden>
+    <button class="modal-close" data-close-modal><svg><use href="#i-x"/></svg></button>
+    <div class="modal-heading"><span class="modal-icon"><svg><use href="#i-copy"/></svg></span><div><h2 id="batchTitle">批量添加 ID</h2><p>支持空格、逗号、换行，也可以直接粘贴链接。</p></div></div>
+    <textarea id="batchTextarea" placeholder="例如：&#10;123456&#10;JM654321&#10;https://example.com/album/778899"></textarea>
+    <div class="batch-preview" id="batchPreview"><span>等待输入</span><strong>0 个有效 ID</strong></div>
+    <div class="modal-actions"><button class="secondary-button" data-close-modal>取消</button><button class="primary-button" id="confirmBatchButton" disabled>加入下载清单</button></div>
+  </section>
+
+  <section class="modal settings-modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+    <button class="modal-close" data-close-modal><svg><use href="#i-x"/></svg></button>
+    <div class="modal-heading"><span class="modal-icon"><svg><use href="#i-settings"/></svg></span><div><h2 id="settingsTitle">偏好设置</h2><p>调整外观和文件命名方式，修改会自动保存。</p></div></div>
+    <div class="preferences-grid">
+      <div class="preference-row"><div><strong>界面主题</strong><p>跟随系统或固定明暗主题</p></div><select id="themeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
+      <div class="preference-row"><div><strong>文件名语言</strong><p>影响保存后的目录和文件名称</p></div><select id="filenameLangInput"><option value="traditional">繁体中文</option><option value="simplified">简体中文</option></select></div>
+      <div class="preference-row"><div><strong>章节并发</strong><p>单个作品内同时处理的章节数</p></div><select id="photoThreadsInput"><option value="1">1（稳定）</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5（更快）</option></select></div>
+    </div>
+    <div class="modal-note"><svg><use href="#i-info"/></svg><p>较高并发会占用更多网络和磁盘资源。默认配置更适合长时间批量下载。</p></div>
+    <div class="modal-actions"><span class="save-state"><span></span>自动保存已开启</span><button class="primary-button" data-close-modal>完成</button></div>
+  </section>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>

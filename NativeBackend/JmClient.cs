@@ -59,7 +59,13 @@ public sealed class JmClient : IDisposable
         };
     }
 
-    public async Task<List<AlbumItemDto>> SearchAsync(string query, int page, CancellationToken cancellationToken, int mainTag = 0)
+    public async Task<List<AlbumItemDto>> SearchAsync(
+        string query,
+        int page,
+        CancellationToken cancellationToken,
+        int mainTag = 0,
+        string orderBy = "mr",
+        string time = "a")
     {
         page = Math.Max(1, page);
         var data = await ApiGetAsync("/search", new Dictionary<string, string>
@@ -67,8 +73,8 @@ public sealed class JmClient : IDisposable
             ["main_tag"] = mainTag.ToString(CultureInfo.InvariantCulture),
             ["search_query"] = query,
             ["page"] = page.ToString(CultureInfo.InvariantCulture),
-            ["o"] = "mr",
-            ["t"] = "a",
+            ["o"] = orderBy,
+            ["t"] = time,
         }, cancellationToken).ConfigureAwait(false);
 
         if (TryGetString(data, "redirect_aid", out var redirectAid) && !string.IsNullOrWhiteSpace(redirectAid))
@@ -89,35 +95,47 @@ public sealed class JmClient : IDisposable
 
     public async Task<List<AlbumItemDto>> RankingAsync(string type, CancellationToken cancellationToken)
     {
-        var parameters = type switch
+        var rankingOrder = type.Trim().ToLowerInvariant() switch
         {
-            "day" => new Dictionary<string, string>
-            {
-                ["page"] = "1",
-                ["order"] = string.Empty,
-                ["c"] = "0",
-                ["o"] = "mv_t",
-            },
-            "week" => new Dictionary<string, string>
-            {
-                ["page"] = "1",
-                ["order"] = "mv_w",
-                ["c"] = "0",
-                ["o"] = string.Empty,
-            },
-            "month" => new Dictionary<string, string>
-            {
-                ["page"] = "1",
-                ["order"] = string.Empty,
-                ["c"] = "0",
-                ["o"] = "mv_m",
-            },
+            "day" => "mv_t",
+            "week" => "mv_w",
+            "month" => "mv_m",
             _ => throw new ArgumentException("unsupported ranking type: " + type),
         };
 
-        var data = await ApiGetAsync("/categories/filter", parameters, cancellationToken).ConfigureAwait(false);
+        // Different JM API nodes accept the ranking value through either
+        // `order` or `o`. Prefer the currently active form, then fall back to
+        // the older form when a node returns an empty list.
+        var queryVariants = new[]
+        {
+            new Dictionary<string, string>
+            {
+                ["page"] = "1",
+                ["order"] = rankingOrder,
+                ["c"] = "0",
+                ["o"] = string.Empty,
+            },
+            new Dictionary<string, string>
+            {
+                ["page"] = "1",
+                ["order"] = string.Empty,
+                ["c"] = "0",
+                ["o"] = rankingOrder,
+            },
+        };
 
-        return ParseAlbumItems(data["content"] as JsonArray, ranked: true);
+        List<AlbumItemDto> items = [];
+        foreach (var parameters in queryVariants)
+        {
+            var data = await ApiGetAsync("/categories/filter", parameters, cancellationToken).ConfigureAwait(false);
+            items = ParseAlbumItems(data["content"] as JsonArray, ranked: true);
+            if (items.Count > 0)
+            {
+                return items;
+            }
+        }
+
+        return items;
     }
 
     public async Task<AlbumDetailDto> GetAlbumDetailAsync(string albumId, CancellationToken cancellationToken)

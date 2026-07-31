@@ -25,6 +25,32 @@ internal static class NativeBackendSmoke
             return RunArtifactSelfCheck(args.Length > 1 ? args[1] : null);
         }
 
+        if (args.Length > 0 && args[0] == "--serve")
+        {
+            var seconds = args.Length > 1 && int.TryParse(args[1], out var parsedSeconds) ? parsedSeconds : 60;
+            Console.WriteLine("SMOKE_BASE=" + server.BaseUri);
+            Console.WriteLine("SMOKE_TOKEN=" + server.Token);
+            await Task.Delay(TimeSpan.FromSeconds(Math.Max(1, seconds)));
+            return 0;
+        }
+
+        if (args.Length > 0 && args[0] == "--cover-auth-selfcheck")
+        {
+            var id = args.Length > 1 ? args[1] : "1444613";
+            using var anonymous = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            using var denied = await anonymous.GetAsync(new Uri(server.BaseUri, $"api/cover/{id}"));
+            Require((int)denied.StatusCode == 401, "cover endpoint accepted a request without a token");
+
+            var coverUri = new Uri(server.BaseUri, $"api/cover/{id}?token={Uri.EscapeDataString(server.Token)}");
+            using var allowed = await anonymous.GetAsync(coverUri);
+            var bytes = await allowed.Content.ReadAsByteArrayAsync();
+            allowed.EnsureSuccessStatusCode();
+            Require(bytes.Length > 0, "cover endpoint returned an empty image");
+            Require(allowed.Content.Headers.ContentType?.MediaType == "image/jpeg", "cover endpoint returned the wrong content type");
+            Console.WriteLine($"cover auth selfcheck ok: {bytes.Length} bytes, cache={allowed.Headers.CacheControl}");
+            return 0;
+        }
+
         if (args.Length > 0 && args[0] == "--download")
         {
             var id = args.Length > 1 ? args[1] : "1437914";
