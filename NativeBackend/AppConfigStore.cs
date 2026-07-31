@@ -14,8 +14,23 @@ public sealed class AppConfigStore
     {
         AppDataRoot = appDataRoot;
         ConfigPath = Path.Combine(AppDataRoot, "config.json");
-        DefaultDownloadDir = Path.Combine(AppContext.BaseDirectory, "JMDownLoad");
+        DefaultDownloadDir = Path.Combine(ResolveExecutableDirectory(), "JMDownLoad");
         LegacyDefaultDownloadDir = Path.Combine(AppDataRoot, "JMDownLoad");
+    }
+
+    private static string ResolveExecutableDirectory()
+    {
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(processPath))
+        {
+            var processDirectory = Path.GetDirectoryName(processPath);
+            if (!string.IsNullOrWhiteSpace(processDirectory))
+            {
+                return processDirectory;
+            }
+        }
+
+        return AppContext.BaseDirectory;
     }
 
     public string AppDataRoot { get; }

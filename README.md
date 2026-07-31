@@ -1,238 +1,175 @@
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=5aac44&height=16" width="100%"/>
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=8B6914&height=10" width="100%"/>
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=6B4F12&height=6" width="100%"/>
-</p>
-
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=24&pause=99999&color=5aac44&center=true&vCenter=true&width=640&height=80&lines=JMComic+Desktop" alt="JMComic Desktop"/>
-</p>
-
-<p align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=9&pause=99999&color=c8a96e&center=true&vCenter=true&width=640&height=36&lines=%E6%BC%AB%E7%94%BB%E4%B8%8B%E8%BD%BD+%26+%E6%A0%BC%E5%BC%8F%E8%BD%AC%E6%8D%A2%E5%B7%A5%E5%85%B7" alt="subtitle"/>
-</p>
-
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=6B4F12&height=6" width="100%"/>
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=8B6914&height=10" width="100%"/>
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=5aac44&height=16" width="100%"/>
-</p>
-
-<br>
-
 <div align="center">
 
-<a href="https://github.com/yxxawa/jmDownload/stargazers"><img src="https://img.shields.io/github/stars/yxxawa/jmDownload?style=for-the-badge&color=5aac44&logo=github&logoColor=white&label=STARS" alt="Stars"/></a>
-<a href="https://github.com/yxxawa/jmDownload/releases"><img src="https://img.shields.io/github/downloads/yxxawa/jmDownload/total?style=for-the-badge&color=8B6914&logo=github&logoColor=white&label=DOWNLOADS" alt="Downloads"/></a>
+# JM Download
 
-<br><br>
+**找到想看的，剩下交给队列。**
 
-![Platform](https://img.shields.io/badge/Windows-x64_%7C_arm64-3d8c40?style=for-the-badge)
-![.NET](https://img.shields.io/badge/.NET-9.0-6B4F12?style=for-the-badge)
-![WPF](https://img.shields.io/badge/UI-WPF-8B6914?style=for-the-badge)
-![Backend](https://img.shields.io/badge/Backend-C%23-5aac44?style=for-the-badge)
+一个面向 Windows 的 JMComic 桌面下载工具，提供搜索、榜单、批量队列、记录管理与多格式输出。
 
-<br>
-
-<img src="https://readme-typing-svg.demolab.com?font=Press+Start+2P&size=10&pause=1200&color=c8a96e&center=true&vCenter=true&width=580&height=50&lines=%E6%90%9C%E7%B4%A2+%2F+%E6%A6%9C%E5%8D%95+%2F+%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BD+%2F+%E6%A0%BC%E5%BC%8F%E8%BD%AC%E6%8D%A2;%E5%9B%BE%E7%89%87%E7%9B%AE%E5%BD%95+%3C%3D%3E+ZIP+%3C%3D%3E+PDF;C%23+%E5%8E%9F%E7%94%9F%E5%90%8E%E7%AB%AF%EF%BC%8C%E4%B8%8D%E4%BE%9D%E8%B5%96+Python" alt="Typing"/>
-
-<br>
-
-> **一个偏实用、少折腾的 JMComic Windows 桌面客户端。**  
-> 能搜、能看榜、能批量下，也能把下载结果整理成你想要的格式。
+![Windows](https://img.shields.io/badge/Windows-x64%20%7C%20ARM64-347A5B?style=flat-square&logo=windows11&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-9-225F44?style=flat-square&logo=dotnet&logoColor=white)
+![UI](https://img.shields.io/badge/UI-WPF%20%2B%20WebView2-4D9672?style=flat-square)
+![Backend](https://img.shields.io/badge/Backend-C%23-347A5B?style=flat-square&logo=csharp&logoColor=white)
 
 </div>
-
-<br>
-
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
 
 ## 界面预览
 
-<table align="center">
-  <tr>
-    <td align="center">
-      <img src="https://github.com/user-attachments/assets/5eeb9d1d-8f10-47ac-9db2-8af8b56ee8b9" width="100%" alt="主界面"/>
-      <br><sub>[ 主界面 ]</sub>
-    </td>
-  </tr>
-</table>
+<img src="assets/app-preview.png" width="100%" alt="JM Download 主界面"/>
 
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+界面采用与程序一致的低饱和绿色主题，以搜索、选择、队列和下载为主线，常用操作集中在一个工作区内完成。
 
-## 下载格式
+## 主要功能
 
-支持三种输出，按使用场景直接选：
+| 模块 | 功能 |
+| --- | --- |
+| **搜索** | 按标题、作者或作品 ID 搜索，支持时间筛选与结果排序 |
+| **榜单** | 浏览日榜、周榜和月榜，刷新时保留当前选择 |
+| **批量选择** | 从搜索结果或榜单中加入多个作品，也可直接粘贴多个 ID |
+| **下载队列** | 展示等待、运行、完成与失败状态，下载过程中局部更新列表 |
+| **输出格式** | 支持图片目录、ZIP 和 PDF |
+| **资源复用** | 已存在的图片、ZIP 或 PDF 可直接转换，减少重复下载 |
+| **任务记录** | 查看历史任务、输出位置和执行结果 |
+| **外观设置** | 支持浅色与深色模式，设置会自动保存 |
 
-| 格式 | 适合场景 |
-|:---:|:---|
-| **图片目录** | 保留原始分页，方便二次整理、压缩或导入其他工具 |
-| **ZIP** | 得到一个干净的压缩包，方便归档、转移和备份 |
-| **PDF** | 直接用阅读器打开，或者放到平板、电子设备上看 |
+### 搜索筛选与排序
 
-<details>
-<summary>格式复用说明（点击展开）</summary>
-<br>
+- 时间范围：全部、今天、本周、本月
+- 排序方式：相关度、最新、浏览量、页数、收藏量
+- 支持普通关键词、作品 ID 与批量 ID
 
-- 已有图片目录 → 直接打包成 ZIP 或 PDF
-- 已有 ZIP → 转成图片目录或 PDF
-- 已有 PDF → 提取为图片目录或转 ZIP
-- 目标格式已存在时会跳过重复下载
+### 下载与输出
 
-</details>
+- 多作品批量下载
+- 按作品自动创建目录
+- 图片后缀转换
+- ZIP 打包
+- PDF 合并或按章节导出
+- 下载并发与图片并发设置
+- 已有目标格式自动识别
 
-默认下载到程序同目录下的 `JMDownLoad`。
+## 下载使用
 
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+前往项目的 [**Releases**](https://github.com/yxxawa/jmDownload/releases/latest) 页面，根据设备架构选择：
 
-## 功能特性
+| 设备 | 文件 |
+| --- | --- |
+| 常见 Intel / AMD Windows 电脑 | `JMDownload-win-x64.exe` |
+| Windows on ARM 设备 | `JMDownload-win-arm64.exe` |
 
-<details open>
-<summary>搜索与榜单</summary>
-<br>
+下载后直接运行单文件 EXE。
 
-- 关键词搜索
-- 搜索结果排序：最新、浏览量、页数、收藏量
-- 搜索时间筛选：全部、今天、本周、本月
-- 日榜、周榜、月榜
-- 支持本子 ID 和章节 ID
+### 运行环境
 
-</details>
+发布版采用自包含方式，`.NET 9 Desktop Runtime` 已包含在 EXE 中。
 
-<details open>
-<summary>下载与队列</summary>
-<br>
+程序使用系统安装的 **Microsoft Edge WebView2 Evergreen Runtime** 显示界面，发布包不携带 WebView2 浏览器运行时。Windows 11 以及多数较新的 Windows 10 环境通常已经安装该组件。
 
-- 批量下载
-- 图片目录 / ZIP / PDF 输出
-- PDF 支持多章节合并或按章节分开
-- 下载队列、任务状态、日志面板
+## 基本流程
 
-</details>
+1. 在搜索框输入标题、作者或作品 ID。
+2. 使用筛选和排序缩小结果范围。
+3. 点击卡片右上角按钮，将作品加入右侧下载清单。
+4. 选择图片、ZIP 或 PDF 输出格式。
+5. 设置保存位置和并发参数。
+6. 点击 **开始下载**，在任务页查看实时进度。
 
-<details open>
-<summary>记录与复用</summary>
-<br>
+快捷键：
 
-- 下载记录
-- 已下载资源索引
-- 已有格式复用转换，减少重复下载
+| 快捷键 | 操作 |
+| --- | --- |
+| `Ctrl + K` | 聚焦搜索框 |
+| `Ctrl + Enter` | 开始下载 |
 
-</details>
+## 数据位置
 
-<details open>
-<summary>运行方式</summary>
-<br>
+| 数据 | 默认位置 |
+| --- | --- |
+| 下载内容 | EXE 所在目录下的 `JMDownLoad` |
+| 用户设置 | `%LOCALAPPDATA%\JMComicDesktop\config.json` |
+| WebView2 用户数据 | `%LOCALAPPDATA%\JMComicDesktop\WebView2` |
+| 下载索引 | 下载目录中的 `.jmdownload_index.json` |
 
-- C# 原生后端，无需 Python
-- WPF + WebView2 界面
-- 单文件 EXE，开箱即用
+保存位置可在程序右侧面板中随时修改。
 
-</details>
+## 本地构建
 
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+需要：
 
-## 获取 Release
-
-<div align="center">
-
-| 架构 | 文件 |
-|:---:|:---|
-| ![x64](https://img.shields.io/badge/x64-3d8c40?style=for-the-badge&logo=windows11&logoColor=white) | [`JMDownload-win-x64.exe`](https://github.com/yxxawa/jmDownload/releases/latest) |
-| ![arm64](https://img.shields.io/badge/arm64-8B6914?style=for-the-badge&logo=windows11&logoColor=white) | [`JMDownload-win-arm64.exe`](https://github.com/yxxawa/jmDownload/releases/latest) |
-
-</div>
-
-直接运行，无需解压。
-
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
-
-## 运行要求
-
-| 环境 | 要求 |
-|:---|:---|
-| 开发运行 | Windows、.NET 9 SDK、WebView2 Runtime |
-| 发布版运行 | Windows x64 / arm64、.NET 9 Desktop Runtime、WebView2 Runtime |
-
-> WebView2 Runtime 通常已预装于 Windows 11。若缺失，可从 Microsoft 官方页面安装。
-
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
-
-## 构建与发布
-
-<details>
-<summary>展开命令</summary>
-<br>
+- Windows
+- .NET 9 SDK
+- Microsoft Edge WebView2 Runtime
 
 ```powershell
-# 构建
+dotnet restore
 dotnet build DesktopShell.csproj -c Release
-
-# 运行
 dotnet run --project DesktopShell.csproj
-
-# 发布单文件 EXE，非自包含，win-x64
-dotnet publish DesktopShell.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
 ```
 
-把 `win-x64` 换成 `win-arm64` 可以生成对应架构。
+## 发布单文件 EXE
 
-</details>
+项目已内置单文件发布参数。WebView2 Evergreen Runtime 保持为系统组件，不写入发布包。
 
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+```powershell
+# Windows x64
+dotnet publish DesktopShell.csproj `
+  -c Release `
+  -r win-x64 `
+  -o artifacts/single-file/win-x64
 
-## 数据文件
+# Windows ARM64
+dotnet publish DesktopShell.csproj `
+  -c Release `
+  -r win-arm64 `
+  -o artifacts/single-file/win-arm64
+```
 
-<details>
-<summary>展开说明</summary>
-<br>
+发布参数包括：
 
-程序运行时可能生成：
-
-| 文件 / 目录 | 说明 |
-|:---|:---|
-| `程序目录/JMDownLoad/` | 默认下载目录 |
-| `%LOCALAPPDATA%/JMComicDesktop/config.json` | 程序配置 |
-| `.jmdownload_index.json` | 已下载资源索引 |
-| 日志文件 | 运行和下载日志 |
-
-这些文件已在 `.gitignore` 中排除。
-
-</details>
-
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+- 自包含 .NET 9 Desktop Runtime
+- 单文件输出
+- 单文件压缩
+- 按目标架构包含必要的原生加载组件
+- 外部使用系统 WebView2 Evergreen Runtime
+- 保留完整 WPF 与 WebView2 托管调用，关闭裁剪以保证稳定性
 
 ## 项目结构
 
 ```text
 jmDownload/
-├── NativeBackend/                C# 原生 JMComic 后端
-├── frontend/                     WebView 前端页面
-├── assets/                       README 与界面资源
-├── MainWindow.xaml               WPF + WebView2 桌面壳
-└── DesktopShell.csproj           .NET 项目入口
+├── assets/
+│   └── app-preview.png           README 界面预览
+├── frontend/
+│   ├── index.html                页面结构
+│   ├── styles.css                主题与布局
+│   └── app.js                    前端状态与交互
+├── NativeBackend/
+│   ├── JmClient.cs               API 与数据请求
+│   ├── NativeDownloadManager.cs  队列和下载流程
+│   ├── ArtifactTools.cs          ZIP / PDF / 图片处理
+│   └── AppConfigStore.cs         设置持久化
+├── MainWindow.xaml               WPF 桌面窗口
+├── MainWindow.xaml.cs            WebView2 生命周期
+└── DesktopShell.csproj           项目与发布配置
 ```
 
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+## 技术结构
 
-## Star History
+```text
+WPF Desktop Shell
+        │
+        ├── WebView2 UI
+        │       └── HTML / CSS / JavaScript
+        │
+        └── C# Native Backend
+                ├── Local HTTP API
+                ├── Search & Ranking
+                ├── Download Queue
+                └── Image / ZIP / PDF Pipeline
+```
 
-<div align="center">
-  <a href="https://star-history.com/#yxxawa/jmDownload&Date">
-    <img src="https://api.star-history.com/svg?repos=yxxawa/jmDownload&type=Date&theme=dark" alt="Star History" width="600"/>
-  </a>
-</div>
-
-<p align="center"><img src="assets/divider.svg" width="100%"/></p>
+前端资源以嵌入资源形式随程序发布，后端、下载器与格式处理均由 C# 实现。
 
 ## 说明
 
-本项目仅供学习交流使用。下载内容版权归原作者所有，请尊重版权并合理使用。
-
-<br>
-
-<p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=5aac44&height=16" width="100%"/>
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=8B6914&height=10" width="100%"/>
-  <img src="https://capsule-render.vercel.app/api?type=rect&color=6B4F12&height=6" width="100%"/>
-</p>
+本项目用于技术交流与个人工具开发。下载内容的相关权利归原作者及对应平台所有，请遵守所在地规则与平台条款。

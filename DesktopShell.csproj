@@ -13,6 +13,19 @@
     <FileVersion>1.0.0.0</FileVersion>
     <AllowedOutputExtensionsInSingleFileSelfExtract>.dll;.exe;.json;.config;.pdb;.xml</AllowedOutputExtensionsInSingleFileSelfExtract>
     <AllowedReferenceRelatedFileExtensions></AllowedReferenceRelatedFileExtensions>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(SmokeTest)' != 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <DebugType>None</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(SmokeTest)' != 'true'">
@@ -33,6 +46,22 @@
       <PublishedXmlDocs Include="$(PublishDir)*.xml" />
     </ItemGroup>
     <Delete Files="@(PublishedXmlDocs)" />
+  </Target>
+
+  <!--
+    WebView2 Evergreen Runtime is supplied by Windows and stays outside the
+    single-file package. Only the small SDK bridge/loader required by the WPF
+    host is published with the application.
+  -->
+  <Target Name="ExcludeWebView2BrowserRuntime" BeforeTargets="GenerateSingleFileBundle">
+    <ItemGroup>
+      <WebView2BrowserRuntime Include="@(ResolvedFileToPublish)"
+                              Condition="'%(ResolvedFileToPublish.Filename)' == 'msedgewebview2'
+                                      Or '%(ResolvedFileToPublish.Filename)' == 'EmbeddedBrowserWebView'
+                                      Or '%(ResolvedFileToPublish.Filename)' == 'msedge'
+                                      Or '%(ResolvedFileToPublish.Filename)' == 'msedge_elf'" />
+      <ResolvedFileToPublish Remove="@(WebView2BrowserRuntime)" />
+    </ItemGroup>
   </Target>
 
 </Project>
