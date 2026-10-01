@@ -33,6 +33,19 @@
     <Compile Remove="NativeBackendSmoke.cs" />
   </ItemGroup>
 
+  <!--
+    mobile/ 是独立的手机端工程，不属于桌面端编译范围。
+    SDK 默认的 **/*.cs 通配符会把它一起编进来，而
+    mobile/android/Backend/ 下的 ArtifactTools、JmImageDecoder
+    与 NativeBackend/ 下的同名类同命名空间，会触发 CS0111 重复定义。
+  -->
+  <ItemGroup>
+    <Compile Remove="mobile\**" />
+    <EmbeddedResource Remove="mobile\**" />
+    <None Remove="mobile\**" />
+    <Page Remove="mobile\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3967.48" />
   </ItemGroup>
