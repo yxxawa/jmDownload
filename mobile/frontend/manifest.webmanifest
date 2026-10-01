@@ -1,0 +1,26 @@
+{
+  "name": "JM Download",
+  "short_name": "JM Download",
+  "description": "漫画检索、整理、下载与在线阅读的手机端工作区。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "id": "jm-download-mobile",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f3f5f2",
+  "theme_color": "#347a5b",
+  "categories": ["books", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "书架", "url": "./?view=shelf" },
+    { "name": "下载任务", "url": "./?view=queue" }
+  ]
+}

@@ -1,0 +1,6 @@
+bin/
+obj/
+dist/
+toolchain/
+*.keystore
+*.log

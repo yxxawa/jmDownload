@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="app_name">JM Download</string>
+  <string name="notification_channel_name">后台下载</string>
+  <string name="notification_channel_description">保持下载任务在网络与存储之间持续进行</string>
+  <string name="notification_title">JM Download 正在运行</string>
+  <string name="notification_idle">没有正在进行的下载</string>
+  <string name="notification_running">正在下载 %1$d 个作品</string>
+</resources>

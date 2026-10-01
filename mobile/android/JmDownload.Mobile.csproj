@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>JmDownload.Mobile</RootNamespace>
+    <AssemblyName>JmDownload</AssemblyName>
+
+    <ApplicationId>com.jmd.mobile</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
+    <AndroidPackageFormat>apk</AndroidPackageFormat>
+
+    <AndroidUseAapt2>true</AndroidUseAapt2>
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <!-- 不用裁剪：后端大量依赖 System.Text.Json 的反射序列化，裁剪会静默丢字段。
+         裁剪关掉后 AOT 也必须一起关（.NET 的限制）。 -->
+    <AndroidLinkMode>None</AndroidLinkMode>
+    <PublishTrimmed>false</PublishTrimmed>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <AndroidCreatePackagePerAbi>false</AndroidCreatePackagePerAbi>
+    <RuntimeIdentifiers>android-arm64;android-arm;android-x64</RuntimeIdentifiers>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CA1416;XC0022;XA4300;XA4301</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    复用电脑端 NativeBackend 的源码：搜索、作品详情、图片还原、下载队列、
+    ZIP/PDF 导出、书架与阅读进度全部与电脑端是同一份实现。
+    只有这两个文件依赖桌面平台，在 Backend/ 下各有一份 Android 实现：
+      · JmImageDecoder —— 用 Android.Graphics.Bitmap 代替 WPF 的 BitmapSource
+      · ArtifactTools   —— 用 android.icu 的繁简转换代替 kernel32 的 LCMapStringEx
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\NativeBackend\*.cs"
+             Exclude="..\..\NativeBackend\ArtifactTools.cs;..\..\NativeBackend\JmImageDecoder.cs"
+             Link="Backend\Native\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- 手机端界面以嵌入资源方式打进 APK，由 NativeBackendServer 直接对外提供。
+       显式列出每个目录，避免 Windows 上 %(RecursiveDir) 的反斜杠污染资源名。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\frontend\*.*" LogicalName="frontend/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\frontend\icons\*.*"
+                      Exclude="..\frontend\icons\build-icons.mjs;..\frontend\icons\icon.ico"
+                      LogicalName="frontend/icons/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

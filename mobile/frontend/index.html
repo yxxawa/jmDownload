@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f3f5f2" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#111713" media="(prefers-color-scheme: dark)" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="JM Download" />
+  <meta name="format-detection" content="telephone=no" />
+  <title>JM Download</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" sizes="180x180" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="reader.css" />
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v2h14v-2"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1V21h-4v-.09A1.7 1.7 0 0 0 8.55 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1-.4H3v-4h.09A1.7 1.7 0 0 0 4.6 8.55a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1V3h4v.09A1.7 1.7 0 0 0 15.45 4.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.12.39.33.73.6 1 .28.27.63.4 1 .4h.09v4H21a1.7 1.7 0 0 0-1.6.6Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3V7Z"/><path d="M3 7V5h7l2 2"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 13v6H5V6h6"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7"/><path d="M10 11v5m4-5v5"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14m8-14v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5H5v11h3"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10h.01"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 17 4-4 3 3 3-4 6 6"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 7h16v13H4V7Zm-1-3h18v3H3V4Z"/><path d="M9 11h6"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v5h5M9 13h6m-6 4h6"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.3 4.1L17 9l-3.7 1.9L12 15l-1.3-4.1L7 9l3.7-1.9L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 5h7l2 2 2-2h7v15h-7l-2 2-2-2H3V5Z"/><path d="M12 7v15"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4V3Z"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4L4 9"/><path d="M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 4L20 15"/><path d="M20 19v-4h-4"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.6 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.5l6.2-.9L12 3Z"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+    <symbol id="i-tune" viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h4M12 16h8"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/></symbol>
+    <symbol id="i-wifi-off" viewBox="0 0 24 24"><path d="M3 4l18 16"/><path d="M5 12.5a11 11 0 0 1 4-2.4M15.5 10.4a11 11 0 0 1 3.5 2.1"/><path d="M8.5 16a6 6 0 0 1 7 0"/><path d="M12 20h.01"/><path d="M2 8.8A15 15 0 0 1 8 5.4m8.5.2a15 15 0 0 1 5.5 3.2"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></symbol>
+    <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6 3v13a2 2 0 0 0 2 2h13"/><path d="M3 6h13a2 2 0 0 1 2 2v13"/></symbol>
+    <symbol id="i-arrow-up-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 16V8m0 0-4 4m4-4 4 4"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+  </svg>
+
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <div class="app-root" id="appRoot">
+    <main class="screens" id="screens">
+
+      <!-- ───────────── 发现 ───────────── -->
+      <section class="screen is-active" id="screen-discover" data-screen="discover">
+        <header class="app-bar" id="discoverBar">
+          <div class="app-bar-copy">
+            <h1>发现<em class="app-bar-mark">JM</em></h1>
+          </div>
+          <div class="app-bar-actions">
+            <button class="icon-btn" id="themeToggle" aria-label="切换主题">
+              <svg class="theme-icon-light"><use href="#i-sun"/></svg>
+              <svg class="theme-icon-dark"><use href="#i-moon"/></svg>
+            </button>
+            <button class="icon-btn" id="plannerToggleTop" aria-label="打开下载清单">
+              <svg><use href="#i-list"/></svg>
+              <i class="dot-badge" id="plannerToggleCount" hidden>0</i>
+            </button>
+          </div>
+        </header>
+
+        <header class="search-bar" id="searchBar" hidden>
+          <button class="icon-btn" id="searchCancel" aria-label="取消搜索"><svg><use href="#i-arrow-left"/></svg></button>
+          <form class="search-field" id="searchForm">
+            <svg class="search-leading"><use href="#i-search"/></svg>
+            <input id="searchInput" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" placeholder="搜索标题、作者或作品 ID" aria-label="搜索" />
+            <button type="button" class="field-clear" id="searchClear" aria-label="清空" hidden><svg><use href="#i-x"/></svg></button>
+          </form>
+        </header>
+
+        <div class="screen-scroll" id="discoverScroll">
+          <button class="search-entry" id="searchEntry">
+            <svg><use href="#i-search"/></svg><span>搜索标题、作者或作品 ID</span>
+          </button>
+
+          <div class="quick-strip" id="quickStrip" aria-label="快捷操作">
+            <button class="quick-action" id="quickShelf" type="button">
+              <span class="quick-action-icon"><svg><use href="#i-book"/></svg></span>
+              <span class="quick-action-copy"><b>继续阅读</b><small id="quickShelfMeta">打开书架</small></span>
+              <svg class="quick-action-arrow"><use href="#i-chevron"/></svg>
+            </button>
+            <button class="quick-action" id="quickQueue" type="button">
+              <span class="quick-action-icon queue"><svg><use href="#i-download"/></svg></span>
+              <span class="quick-action-copy"><b>下载任务</b><small id="quickQueueMeta">队列空闲</small></span>
+              <svg class="quick-action-arrow"><use href="#i-chevron"/></svg>
+            </button>
+            <button class="quick-action quick-action-icon-only" id="quickRefresh" type="button" aria-label="刷新内容">
+              <span class="quick-action-icon"><svg><use href="#i-refresh"/></svg></span>
+            </button>
+          </div>
+
+          <div class="search-landing" id="searchLanding" hidden>
+            <div class="landing-head"><span>最近搜索</span><button class="text-btn" id="clearRecent">清空</button></div>
+            <div class="landing-list" id="recentSearches"></div>
+          </div>
+
+          <div class="filter-panel" id="searchControls" hidden>
+            <div class="chip-row scroll-x">
+              <span class="chip-row-label"><svg><use href="#i-tune"/></svg>排序</span>
+              <div class="chip-track" id="searchSortTabs" role="group" aria-label="搜索结果排序">
+                <button class="chip is-active" data-search-sort="mr">最新</button>
+                <button class="chip" data-search-sort="mv">浏览</button>
+                <button class="chip" data-search-sort="mp">页数</button>
+                <button class="chip" data-search-sort="tf">收藏</button>
+              </div>
+            </div>
+            <div class="chip-row">
+              <span class="chip-row-label"><svg><use href="#i-clock"/></svg>时间</span>
+              <div class="chip-track">
+                <select class="chip-select" id="searchTimeSelect" aria-label="搜索时间范围">
+                  <option value="a">全部时间</option>
+                  <option value="t">今天</option>
+                  <option value="w">本周</option>
+                  <option value="m">本月</option>
+                </select>
+              </div>
+              <button class="text-btn" id="resetSearchFilters" type="button" hidden>恢复默认</button>
+            </div>
+          </div>
+
+          <div class="section-head" id="discoverSectionHead">
+            <div>
+              <h2 id="contentTitle">热门榜单</h2>
+            </div>
+            <div class="section-head-tools">
+              <div class="segmented" id="rankingTabs" role="tablist">
+                <button class="is-active" data-rank="day">今日</button>
+                <button data-rank="week">本周</button>
+                <button data-rank="month">本月</button>
+              </div>
+              <div class="segmented icon-only" id="layoutPicker" role="group" aria-label="结果布局">
+                <button class="is-active" type="button" data-layout="grid" aria-label="网格视图" aria-pressed="true"><svg><use href="#i-grid"/></svg></button>
+                <button type="button" data-layout="list" aria-label="列表视图" aria-pressed="false"><svg><use href="#i-list"/></svg></button>
+              </div>
+              <button class="icon-btn" id="refreshButton" aria-label="刷新"><svg><use href="#i-refresh"/></svg></button>
+            </div>
+          </div>
+
+          <div class="result-state" id="resultState" hidden></div>
+          <div class="album-grid" id="albumGrid" aria-live="polite"></div>
+          <div class="load-more-wrap" id="loadMoreWrap" hidden>
+            <button class="ghost-btn" id="loadMoreButton">加载更多</button>
+          </div>
+          <div class="scroll-tail"></div>
+        </div>
+      </section>
+
+      <!-- ───────────── 书架 ───────────── -->
+      <section class="screen" id="screen-shelf" data-screen="shelf">
+        <header class="app-bar">
+          <div class="app-bar-copy"><h1>书架</h1></div>
+          <div class="app-bar-actions">
+            <button class="icon-btn" id="shelfRefresh" aria-label="刷新书架"><svg><use href="#i-refresh"/></svg></button>
+          </div>
+        </header>
+        <div class="chip-row scroll-x sticky-chips">
+          <div class="chip-track" id="shelfFilters" role="group" aria-label="书架分类">
+            <button class="chip is-active" data-shelf-filter="recent">最近阅读</button>
+            <button class="chip" data-shelf-filter="favorite">收藏</button>
+            <button class="chip" data-shelf-filter="bookmarks">书签</button>
+            <button class="chip" data-shelf-filter="local">本地作品</button>
+          </div>
+        </div>
+        <div class="screen-scroll">
+          <div class="list-meta"><span id="shelfCount"></span></div>
+          <div id="shelfList" class="shelf-list" aria-live="polite"></div>
+          <div class="scroll-tail"></div>
+        </div>
+      </section>
+
+      <!-- ───────────── 任务 ───────────── -->
+      <section class="screen" id="screen-queue" data-screen="queue">
+        <header class="app-bar">
+          <div class="app-bar-copy"><h1>任务</h1><p id="queueSummary">队列目前为空</p></div>
+          <div class="app-bar-actions">
+            <button class="icon-btn" id="queueRefresh" aria-label="刷新任务"><svg><use href="#i-refresh"/></svg></button>
+            <span class="status-pill" id="queueStatePill">空闲</span>
+          </div>
+        </header>
+
+        <div class="stats-strip">
+          <button class="stat" data-stat-filter="all"><span>队列</span><strong id="statTotal">0</strong></button>
+          <button class="stat is-running" data-stat-filter="running"><span>处理中</span><strong id="statRunning">0</strong></button>
+          <button class="stat is-success" data-stat-filter="success"><span>已完成</span><strong id="statSuccess">0</strong></button>
+          <button class="stat is-danger" data-stat-filter="failed"><span>异常</span><strong id="statFailed">0</strong></button>
+        </div>
+
+        <div class="action-row">
+          <button class="ghost-btn" id="openRootButton"><svg><use href="#i-folder"/></svg>打开目录</button>
+          <button class="danger-btn" id="stopAllButton" disabled><svg><use href="#i-pause"/></svg>停止全部</button>
+          <span class="action-row-hint" id="runningName">暂无任务</span>
+        </div>
+
+        <div class="segmented wide" id="queueSegments" role="tablist">
+          <button class="is-active" data-queue-panel="tasks">任务队列</button>
+          <button data-queue-panel="logs">活动记录</button>
+        </div>
+
+        <div class="screen-scroll">
+          <div class="queue-panel" id="queuePanelTasks">
+            <div class="task-list" id="taskList"></div>
+          </div>
+          <div class="queue-panel" id="queuePanelLogs" hidden>
+            <div class="list-meta"><span>仅保留关键事件，便于定位问题</span><button class="text-btn" id="clearLogsButton">清空</button></div>
+            <div class="log-list" id="logList"></div>
+          </div>
+          <div class="scroll-tail"></div>
+        </div>
+      </section>
+
+      <!-- ───────────── 记录 ───────────── -->
+      <section class="screen" id="screen-history" data-screen="history">
+        <header class="app-bar">
+          <div class="app-bar-copy"><h1>记录</h1></div>
+          <div class="app-bar-actions">
+            <button class="icon-btn danger" id="clearHistoryButton" aria-label="清空记录"><svg><use href="#i-trash"/></svg></button>
+          </div>
+        </header>
+        <div class="chip-row sticky-chips">
+          <div class="chip-track" id="historyFilters">
+            <button class="chip is-active" data-history-filter="all">全部</button>
+            <button class="chip" data-history-filter="success">已完成</button>
+            <button class="chip" data-history-filter="failed">异常</button>
+          </div>
+        </div>
+        <div class="screen-scroll">
+          <div class="history-list" id="historyList"></div>
+          <div class="scroll-tail"></div>
+        </div>
+      </section>
+
+      <!-- ───────────── 设置 ───────────── -->
+      <section class="screen" id="screen-settings" data-screen="settings">
+        <header class="app-bar">
+          <div class="app-bar-copy"><h1>设置</h1></div>
+        </header>
+        <div class="screen-scroll">
+          <section class="group">
+            <h2 class="group-title">外观</h2>
+            <div class="row">
+              <div class="row-copy"><strong>界面主题</strong></div>
+              <select id="themeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+            </div>
+            <div class="row">
+              <div class="row-copy"><strong>阅读默认主题</strong></div>
+              <select id="readerThemeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select>
+            </div>
+            <div class="row">
+              <div class="row-copy"><strong>界面动效</strong><p>切换页面与弹层的过渡强度</p></div>
+              <select id="motionSelect"><option value="full">完整</option><option value="reduced">简洁</option></select>
+            </div>
+            <div class="row">
+              <div class="row-copy"><strong>触感反馈</strong></div>
+              <label class="toggle-control"><input id="hapticsInput" type="checkbox" checked><i></i></label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2 class="group-title">下载</h2>
+            <div class="row">
+              <div class="row-copy"><strong>文件名语言</strong></div>
+              <select id="filenameLangInput"><option value="traditional">繁体中文</option><option value="simplified">简体中文</option></select>
+            </div>
+            <div class="row">
+              <div class="row-copy"><strong>章节并发</strong></div>
+              <select id="photoThreadsInput"><option value="1">1（稳定）</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5（更快）</option></select>
+            </div>
+            <div class="row stacked">
+              <div class="row-copy"><strong>保存位置</strong><p id="settingsPathHint">—</p></div>
+              <div class="path-edit">
+                <input id="pathInput" class="text-input" aria-label="保存位置" />
+                <button class="text-btn" id="settingsOpenPath">打开</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="group" id="serverGroup">
+            <h2 class="group-title">连接</h2>
+            <div class="row stacked">
+              <div class="row-copy"><strong>服务地址</strong><p>留空表示使用当前地址</p></div>
+              <input id="serverUrlInput" class="text-input" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="http://192.168.1.5:8080" aria-label="服务地址" />
+            </div>
+            <div class="row stacked">
+              <div class="row-copy"><strong>访问令牌</strong></div>
+              <input id="serverTokenInput" class="text-input" autocapitalize="off" spellcheck="false" aria-label="访问令牌" />
+            </div>
+            <div class="row">
+              <div class="row-copy"><strong>连接状态</strong><p id="serverStatusDetail">正在检测…</p></div>
+              <span class="status-pill" id="serverStatusPill">检测中</span>
+            </div>
+            <button class="primary-btn" id="serverTestButton">测试连接</button>
+          </section>
+
+          <section class="group">
+            <h2 class="group-title">软件</h2>
+            <div class="row">
+              <div class="row-copy"><strong>JM Download 手机端</strong></div>
+              <span class="muted" id="appVersion">—</span>
+            </div>
+          </section>
+          <div class="scroll-tail"></div>
+        </div>
+      </section>
+    </main>
+
+    <button class="plan-fab" id="floatingPlanButton" hidden>
+      <svg><use href="#i-download"/></svg><span>下载清单</span><em id="floatingPlanCount">0</em>
+    </button>
+
+    <nav class="tab-bar" id="tabBar" aria-label="主导航">
+      <button class="tab is-active" data-view="discover" aria-label="发现"><svg><use href="#i-compass"/></svg><span>发现</span></button>
+      <button class="tab" data-view="shelf" aria-label="书架"><svg><use href="#i-book"/></svg><span>书架</span></button>
+      <button class="tab" data-view="queue" aria-label="任务">
+        <span class="tab-icon-wrap"><svg><use href="#i-download"/></svg><i class="dot-badge" id="queueBadge" hidden></i></span><span>任务</span>
+      </button>
+      <button class="tab" data-view="history" aria-label="记录"><svg><use href="#i-clock"/></svg><span>记录</span></button>
+      <button class="tab" data-view="settings" aria-label="设置"><svg><use href="#i-settings"/></svg><span>设置</span></button>
+    </nav>
+  </div>
+
+  <div class="scrim" id="scrim" hidden></div>
+
+  <!-- ───────────── 作品详情 ───────────── -->
+  <section class="sheet sheet-tall" id="detailSheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle" hidden>
+    <div class="sheet-grip"></div>
+    <div id="detailContent" class="sheet-body"></div>
+  </section>
+
+  <!-- ───────────── 下载清单 ───────────── -->
+  <section class="sheet sheet-tall" id="plannerSheet" role="dialog" aria-modal="true" aria-label="下载清单" hidden>
+    <div class="sheet-grip"></div>
+    <header class="sheet-head">
+      <h2>下载清单 <em id="selectedCount">0</em></h2>
+      <div class="sheet-head-actions">
+        <button class="text-btn" id="clearSelectedButton" hidden>清空</button>
+        <button class="icon-btn" data-close-sheet aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+      </div>
+    </header>
+    <div class="sheet-body">
+      <div class="selection-empty" id="selectionEmpty">
+        <div class="empty-illustration"><svg><use href="#i-plus"/></svg></div>
+        <strong>还没有选择作品</strong>
+        <p>点封面上的「加入」，或批量粘贴 ID</p>
+        <button class="ghost-btn" id="emptyBatchButton">批量添加 ID</button>
+      </div>
+      <div class="selected-list" id="selectedList" hidden></div>
+
+      <div class="planner-settings">
+        <div class="setting-block">
+          <label class="setting-label">输出格式</label>
+          <div class="format-picker" id="formatPicker">
+            <button data-format="images" class="is-active"><svg><use href="#i-image"/></svg><span>图片</span></button>
+            <button data-format="zip"><svg><use href="#i-archive"/></svg><span>ZIP</span></button>
+            <button data-format="pdf"><svg><use href="#i-file"/></svg><span>PDF</span></button>
+          </div>
+        </div>
+
+        <div class="setting-block">
+          <div class="setting-label-row"><label class="setting-label">保存位置</label><button class="text-btn" id="plannerOpenPath">打开</button></div>
+          <button class="path-field" id="folderBrowse">
+            <svg><use href="#i-folder"/></svg>
+            <span id="plannerPathLabel">C:\JMDownLoad</span>
+            <svg class="path-chevron"><use href="#i-chevron"/></svg>
+          </button>
+          <label class="switch-row">
+            <span><strong>按作品自动分目录</strong></span>
+            <input type="checkbox" id="autoPathInput" checked><i></i>
+          </label>
+        </div>
+
+        <details class="advanced-settings" id="advancedSettings">
+          <summary><span><svg><use href="#i-settings"/></svg>质量与并发</span><svg class="summary-chevron"><use href="#i-chevron"/></svg></summary>
+          <div class="advanced-body">
+            <label class="select-row"><span>图片格式</span><select id="imageFormatInput"><option value=".png">PNG</option><option value=".jpg">JPG</option><option value="原始格式">保留原始格式</option></select></label>
+            <label class="select-row pdf-only" id="pdfModeRow"><span>PDF 章节</span><select id="pdfModeInput"><option value="merged">合并为一本</option><option value="chapters">章节分开</option></select></label>
+            <label class="range-row"><span><b>图片并发</b><output id="imageThreadsValue">5</output></span><input id="imageThreadsInput" type="range" min="1" max="20" value="5"></label>
+            <label class="range-row"><span><b>作品并发</b><output id="albumThreadsValue">1</output></span><input id="albumThreadsInput" type="range" min="1" max="8" value="1"></label>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="sheet-foot">
+      <div class="save-state" id="saveState"><span></span>设置已同步</div>
+      <button class="primary-btn large" id="startDownloadButton" disabled>
+        <svg><use href="#i-download"/></svg><b>开始下载</b>
+      </button>
+      <p id="downloadHint">选择作品后即可开始</p>
+    </div>
+  </section>
+
+  <!-- ───────────── 批量 ID ───────────── -->
+  <section class="sheet" id="batchSheet" role="dialog" aria-modal="true" aria-labelledby="batchTitle" hidden>
+    <div class="sheet-grip"></div>
+    <header class="sheet-head">
+      <h2 id="batchTitle">批量添加 ID</h2>
+      <button class="icon-btn" data-close-sheet aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+    </header>
+    <div class="sheet-body">
+      <p class="sheet-note">空格、逗号、换行分隔，也可直接粘贴链接</p>
+      <textarea id="batchTextarea" rows="6" autocapitalize="off" spellcheck="false" placeholder="例如：&#10;123456&#10;JM654321&#10;https://example.com/album/778899"></textarea>
+      <div class="batch-preview" id="batchPreview"><span>等待输入</span><strong>0 个有效 ID</strong></div>
+    </div>
+    <div class="sheet-foot row-foot">
+      <button class="ghost-btn" data-close-sheet>取消</button>
+      <button class="primary-btn" id="confirmBatchButton" disabled>加入下载清单</button>
+    </div>
+  </section>
+
+  <!-- ───────────── 电脑端目录选择 ───────────── -->
+  <section class="sheet sheet-tall" id="folderSheet" role="dialog" aria-modal="true" aria-labelledby="folderTitle" hidden>
+    <div class="sheet-grip"></div>
+    <header class="sheet-head">
+      <h2 id="folderTitle">选择电脑端目录</h2>
+      <div class="sheet-head-actions">
+        <button class="icon-btn" id="folderUp" aria-label="上一级"><svg><use href="#i-arrow-up-circle"/></svg></button>
+        <button class="icon-btn" data-close-sheet aria-label="关闭"><svg><use href="#i-x"/></svg></button>
+      </div>
+    </header>
+    <div class="sheet-body">
+      <input id="folderPath" class="text-input" autocapitalize="off" spellcheck="false" aria-label="当前目录" />
+      <p class="sheet-note" style="margin-top:12px">下载文件会保存到这个目录</p>
+      <div class="folder-list" id="folderList"></div>
+    </div>
+    <div class="sheet-foot">
+      <button class="primary-btn large" id="folderUse">使用这个目录</button>
+    </div>
+  </section>
+
+  <!-- ───────────── 阅读器 ───────────── -->
+  <section id="readerWorkspace" class="reader-workspace" aria-label="漫画阅读器" hidden>
+    <div class="reader-stage" id="readerStage">
+      <div id="readerViewport" class="reader-viewport" tabindex="0" aria-label="阅读正文"><div id="readerCanvas" class="reader-canvas"></div></div>
+      <div class="reader-zoom-badge" id="readerZoomBadge" hidden></div>
+      <div class="reader-mini-progress" id="readerMiniProgress" aria-label="阅读进度"></div>
+    </div>
+
+    <header class="reader-chrome reader-top" id="readerTopBar">
+      <button class="reader-btn" id="readerBack" aria-label="返回"><svg><use href="#i-arrow-left"/></svg></button>
+      <div class="reader-title"><strong id="readerBookTitle">正在打开…</strong><span id="readerChapterTitle"></span></div>
+      <button class="reader-btn" id="readerThemeButton" aria-label="切换明暗">
+        <svg class="theme-icon-light"><use href="#i-sun"/></svg>
+        <svg class="theme-icon-dark"><use href="#i-moon"/></svg>
+      </button>
+    </header>
+
+    <footer class="reader-chrome reader-bottom" id="readerBottomBar">
+      <div class="reader-progress-row">
+        <button class="reader-step" id="readerPrevChapter" aria-label="上一章"><svg><use href="#i-chevron-left"/></svg><em>章</em></button>
+        <span class="reader-page-chip" id="readerPageChip">1 / —</span>
+        <input id="readerProgress" type="range" min="0" max="0" value="0" aria-label="阅读进度">
+        <button class="reader-step" id="readerNextChapter" aria-label="下一章"><em>章</em><svg><use href="#i-chevron-right"/></svg></button>
+      </div>
+      <div class="reader-action-row">
+        <button class="reader-action" id="readerDirectoryButton"><svg><use href="#i-list"/></svg><span>目录</span></button>
+        <button class="reader-action" id="readerPrevPage"><svg><use href="#i-chevron-left"/></svg><span>上一页</span></button>
+        <button class="reader-action" id="readerNextPage"><svg><use href="#i-chevron-right"/></svg><span>下一页</span></button>
+        <button class="reader-action" id="readerOptionsButton"><svg><use href="#i-settings"/></svg><span>设置</span></button>
+        <button class="reader-action" id="readerDownload"><svg><use href="#i-download"/></svg><span>下载</span></button>
+      </div>
+      <span class="reader-save-status" id="readerSaveStatus">准备就绪</span>
+    </footer>
+
+    <div class="reader-toast" id="readerToast" hidden></div>
+
+    <aside class="reader-drawer" id="readerDirectory" hidden>
+      <div class="drawer-head"><strong>章节与书签</strong><button class="reader-btn" id="readerDirectoryClose" aria-label="关闭目录"><svg><use href="#i-x"/></svg></button></div>
+      <div class="drawer-body">
+        <div class="drawer-section" id="readerChapters"></div>
+        <h3>阅读书签</h3>
+        <div class="drawer-section" id="readerBookmarks"></div>
+      </div>
+    </aside>
+    <div class="reader-drawer-scrim" id="readerDrawerScrim" hidden></div>
+
+    <section class="sheet reader-options" id="readerOptions" role="dialog" aria-modal="true" aria-label="阅读设置" hidden>
+      <div class="sheet-grip"></div>
+      <header class="sheet-head"><h2>阅读设置</h2><button class="icon-btn" id="readerOptionsClose" aria-label="关闭"><svg><use href="#i-x"/></svg></button></header>
+      <div class="sheet-body">
+        <label class="select-row"><span>阅读方式</span><select id="readerMode"><option value="vertical">竖向滚动</option><option value="single">单页</option><option value="spread">双页</option></select></label>
+        <label class="select-row"><span>页面适应</span><select id="readerFit"><option value="comfortable">舒适宽度</option><option value="width">适应宽度</option><option value="height">适应高度</option><option value="original">原始大小</option></select></label>
+        <label class="select-row"><span>阅读方向</span><select id="readerDirection"><option value="ltr">从左向右</option><option value="rtl">从右向左</option></select></label>
+        <label class="select-row"><span>预读后续页</span><select id="readerPrefetch"><option value="0">不预读</option><option value="1">1 页</option><option value="3">3 页（默认）</option><option value="5">5 页</option></select></label>
+        <label class="select-row"><span>缓存上限</span><select id="readerCacheBudget"><option value="128">128 MB</option><option value="256">256 MB</option><option value="512">512 MB</option><option value="1024">1 GB</option><option value="2048">2 GB</option></select></label>
+        <label class="range-row"><span><b>页面缩放</b><output id="readerZoomValue">100%</output></span><input id="readerZoom" type="range" min="50" max="200" step="5" value="100"></label>
+        <div class="reader-cache-row"><span id="readerCacheStats">正在读取缓存…</span><button class="text-btn" id="readerClearCache">清理缓存</button></div>
+        <p class="group-note">左右轻点或滑动翻页 · 中间轻点隐藏工具栏 · 双指捏合缩放 · 双击切换适应宽度 · 图片左上角长按添加书签</p>
+      </div>
+      <div class="sheet-foot">
+        <button class="primary-btn" id="readerOptionsDone">完成</button>
+      </div>
+    </section>
+  </section>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script src="reader.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
