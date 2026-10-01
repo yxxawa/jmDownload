@@ -240,6 +240,7 @@ public sealed class AppConfigStore
     private static string NormalizePdfMode(string? value)
     {
         var pdfMode = string.IsNullOrWhiteSpace(value) ? "merged" : value.Trim().ToLowerInvariant();
+        if (pdfMode == "separate") pdfMode = "chapters";
         return PdfModes.Contains(pdfMode) ? pdfMode : "merged";
     }
 

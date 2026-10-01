@@ -129,12 +129,17 @@ public sealed class DownloadTaskState
     [JsonPropertyName("total")]
     public int Total { get; set; }
 
+    [JsonPropertyName("total_known")]
+    public bool TotalKnown { get; set; } = true;
+
     [JsonPropertyName("detail")]
     public string Detail { get; set; } = string.Empty;
 }
 
 public sealed class DownloadSnapshot
 {
+    [JsonPropertyName("run_id")]
+    public string RunId { get; set; } = string.Empty;
     [JsonPropertyName("running")]
     public bool Running { get; set; }
 

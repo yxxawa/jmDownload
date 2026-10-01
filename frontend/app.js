@@ -34,12 +34,13 @@
 
   const state = {
     view: 'discover', rank: 'day', mode: 'ranking', query: '', page: 1, hasNext: false,
+    layout: store.get('jm-layout-v1', 'grid') === 'list' ? 'list' : 'grid',
     searchSort: searchSortLabels[savedSearchSort] ? savedSearchSort : 'mr',
     searchTime: searchTimeLabels[savedSearchTime] ? savedSearchTime : 'a',
     items: [], selected: new Map(), config: { ...defaultConfig }, snapshot: { running: false, stopping: false, tasks: [], last_success_ids: [], last_failed_ids: [] },
     logs: store.get('jm-logs-v2', []), history: store.get('jm-history-v2', []), recent: store.get('jm-recent-v2', []),
     historyFilter: 'all', saveTimer: 0, ws: null, reconnectTimer: 0, online: false, requestSerial: 0,
-    tasksLoading: false, snapshotEventSerial: 0
+    tasksLoading: false, snapshotEventSerial: 0, resultController: null, detailSerial: 0, detailController: null, eventSequence: 0, historyTerminalCache: new Map()
   };
 
   const renderCache = {
@@ -132,6 +133,11 @@
     $('#themeLabel').textContent = dark ? '浅色模式' : '深色模式';
     $('#themeSelect').value = preference;
     store.set('jm-theme-v2', preference);
+    window.JMReader?.themeChanged?.(preference);
+    if (desktopMode) {
+      bridgeCall('setTheme', { theme: dark ? 'dark' : 'light' })
+        .catch(error => console.warn('窗口主题同步失败', error.message));
+    }
   }
 
   function toggleTheme() {
@@ -157,7 +163,8 @@
     });
     $$('.view').forEach(node => node.classList.toggle('is-active', node.id === `view-${view}`));
     $('.main-content').scrollTo({ top: 0, behavior: 'smooth' });
-    if (view === 'queue') loadTasks();
+    if (view === 'queue') { renderSnapshot(state.snapshot); renderLogs(); loadTasks(); }
+    if (view === 'shelf') window.JMReader?.loadShelf();
     if (view === 'history') renderHistory();
   }
 
@@ -169,6 +176,7 @@
   }
 
   function closeModals() {
+    state.detailSerial++; state.detailController?.abort();
     $('#modalBackdrop').hidden = true;
     $$('.modal').forEach(modal => modal.hidden = true);
   }
@@ -205,69 +213,74 @@
     return `${searchSortLabels[state.searchSort]} · ${searchTimeLabels[state.searchTime]} · 点击封面查看详情`;
   }
 
+  function beginResults() {
+    state.resultController?.abort(); state.resultController = new AbortController();
+    return {serial:++state.requestSerial, signal:state.resultController.signal};
+  }
   async function loadRanking(rank = state.rank) {
-    state.mode = 'ranking'; state.rank = rank; state.page = 1; state.query = '';
-    $('#searchControls').hidden = true;
-    $('#contentTitle').textContent = '热门榜单';
-    $('#contentSubtitle').textContent = rank === 'day' ? '看看今天大家都在下载什么' : rank === 'week' ? '一周内持续受到关注的作品' : '这个月反复被收藏的作品';
-    $('#rankingTabs').hidden = false;
-    $$('#rankingTabs button').forEach(button => button.classList.toggle('is-active', button.dataset.rank === rank));
-    showSkeletons();
-    const serial = ++state.requestSerial;
+    const current=beginResults();
+    const previous=state.mode==='ranking' && state.rank===rank ? state.items : [];
+    state.mode='ranking'; state.rank=rank; state.page=1; state.query='';
+    $('#searchControls').hidden=true; $('#contentTitle').textContent='热门榜单';
+    $('#contentSubtitle').textContent=rank==='day'?'看看今天大家都在下载什么':rank==='week'?'一周内持续受到关注的作品':'这个月反复被收藏的作品';
+    $('#rankingTabs').hidden=false; $$('#rankingTabs button').forEach(b=>b.classList.toggle('is-active',b.dataset.rank===rank));
+    const cached=store.get(`jm-ranking-v3-${rank}`,null);
+    const existing=previous.length?previous:(cached?.items||[]);
+    state.hasNext=false;
+    if(existing.length){state.items=existing;renderAlbums(existing);}else showSkeletons();
     try {
-      const data = await api(`/api/ranking?type=${encodeURIComponent(rank)}`);
-      if (serial !== state.requestSerial) return;
-      state.items = data.items || [];
-      state.hasNext = false;
-      renderAlbums(state.items);
-      setConnection('online', demoMode ? '演示模式' : '服务已连接');
-    } catch (error) {
-      setConnection('offline', '连接异常');
-      showResultState('榜单加载失败', error.message);
-      toast('榜单加载失败', error.message, 'error');
+      const data=await api(`/api/ranking?type=${encodeURIComponent(rank)}`,{signal:current.signal});
+      if(current.serial!==state.requestSerial)return;
+      state.items=data.items||[]; renderAlbums(state.items);
+      store.set(`jm-ranking-v3-${rank}`,{items:state.items,time:Date.now()});
+    } catch(error) {
+      if(current.serial!==state.requestSerial || error.name==='AbortError')return;
+      if(!existing.length)showResultState('榜单加载失败',error.message);
+      else $('#contentSubtitle').textContent='显示上次结果 · 暂时未能更新';
+      toast('榜单暂时无法更新',error.message,'warning');
     }
   }
-
-  async function search(query, append = false) {
-    query = query.trim();
-    if (!query) { loadRanking(state.rank); return; }
-    state.mode = 'search'; state.query = query;
-    state.page = append ? state.page + 1 : 1;
-    $('#contentTitle').textContent = `“${query}” 的搜索结果`;
-    $('#contentSubtitle').textContent = searchSubtitle();
-    $('#rankingTabs').hidden = true;
-    $('#searchControls').hidden = false;
-    syncSearchControls();
-    if (!append) showSkeletons(8);
-    $('#loadMoreButton').disabled = true;
-    rememberSearch(query);
-    const serial = ++state.requestSerial;
+  async function search(query, append=false) {
+    query=query.trim(); if(!query){loadRanking(state.rank);return;}
+    const existing=state.mode==='search'&&state.query===query?state.items:[];
+    const current=beginResults(), requestedPage=append?state.page+1:1;
+    state.mode='search';state.query=query;
+    $('#contentTitle').textContent=`“${query}” 的搜索结果`;$('#contentSubtitle').textContent=searchSubtitle();
+    $('#rankingTabs').hidden=true;$('#searchControls').hidden=false;syncSearchControls();
+    if(!append&&!existing.length)showSkeletons(8);
+    $('#loadMoreButton').disabled=true;rememberSearch(query);
     try {
-      const params = new URLSearchParams({
-        q: query,
-        page: String(state.page),
-        main_tag: '0',
-        sort: state.searchSort,
-        time: state.searchTime
-      });
-      const data = await api(`/api/search?${params}`);
-      if (serial !== state.requestSerial) return;
-      const incoming = data.items || [];
-      state.items = append ? [...state.items, ...incoming] : incoming;
-      state.hasNext = !!data.has_next && incoming.length > 0;
-      renderAlbums(state.items);
-    } catch (error) {
-      if (append) state.page = Math.max(1, state.page - 1);
-      else showResultState('没有拿到搜索结果', error.message);
-      toast('搜索失败', error.message, 'error');
-    } finally { $('#loadMoreButton').disabled = false; }
+      const params=new URLSearchParams({q:query,page:String(requestedPage),main_tag:'0',sort:state.searchSort,time:state.searchTime});
+      const data=await api(`/api/search?${params}`,{signal:current.signal});
+      if(current.serial!==state.requestSerial)return;
+      const known=new Set(append?state.items.map(i=>String(i.id)):[]);
+      const incoming=(data.items||[]).filter(i=>{const key=String(i.id);if(known.has(key))return false;known.add(key);return true;});
+      state.items=append?[...state.items,...incoming]:incoming;state.page=requestedPage;
+      state.hasNext=!!data.has_next&&(data.items||[]).length>0;
+      if(append&&incoming.length)renderAlbums(incoming,true);
+      else if(!append)renderAlbums(state.items);
+      $('#loadMoreWrap').hidden=!state.hasNext;
+    } catch(error) {
+      if(current.serial!==state.requestSerial || error.name==='AbortError')return;
+      if(!append&&!existing.length)showResultState('没有拿到搜索结果',error.message);
+      toast('搜索失败',error.message,'error');
+    } finally {if(current.serial===state.requestSerial)$('#loadMoreButton').disabled=false;}
   }
 
-  function renderAlbums(items) {
+  function syncLayout() {
+    $('#albumGrid').classList.toggle('is-list', state.layout === 'list');
+    $$('#layoutPicker [data-layout]').forEach(button => {
+      const active = button.dataset.layout === state.layout;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  function renderAlbums(items, append = false) {
     $('#resultState').hidden = true;
     $('#loadMoreWrap').hidden = !(state.mode === 'search' && state.hasNext);
     if (!items.length) { showResultState('这里暂时是空的', '换一个关键词，或直接使用“批量 ID”加入下载清单。'); return; }
-    $('#albumGrid').innerHTML = items.map((item, index) => {
+    const markup = items.map((item, index) => {
       const selected = state.selected.has(String(item.id));
       const src = coverUrl(item.id);
       const eagerCover = index < 16;
@@ -285,6 +298,8 @@
         </div>
       </article>`;
     }).join('');
+    if (append) $('#albumGrid').insertAdjacentHTML('beforeend', markup);
+    else $('#albumGrid').innerHTML = markup;
   }
 
   function syncAlbumSelection(id = null) {
@@ -381,32 +396,75 @@
   }
 
   async function showDetail(id) {
-    const item = state.items.find(entry => String(entry.id) === String(id)) || state.selected.get(String(id));
-    $('#detailContent').innerHTML = '<div class="detail-loading"><div class="spinner"></div><p>正在读取作品信息…</p></div>';
+    state.detailController?.abort(); state.detailController=new AbortController();
+    const serial=++state.detailSerial, signal=state.detailController.signal;
+    const item=state.items.find(i=>String(i.id)===String(id))||state.selected.get(String(id));
+    $('#detailContent').innerHTML='<div class="detail-loading"><div class="spinner"></div><p>正在读取作品信息…</p></div>';
     openModal($('#detailModal'));
     try {
-      const detail = await api(`/api/album/${encodeURIComponent(id)}`);
-      const selected = state.selected.has(String(id));
-      const src = coverUrl(id);
-      $('#detailContent').innerHTML = `<div class="detail-hero">
-        <div class="detail-cover-wrap"><span class="cover-placeholder">J</span>${src ? `<img class="detail-cover" src="${src}" alt="" onerror="this.style.display='none'">` : ''}</div>
-        <div class="detail-info">
-          <span class="detail-overline">JM ${escapeHtml(detail.id || id)}</span>
-          <h2 id="detailTitle">${escapeHtml(detail.title || item?.title || `作品 ${id}`)}</h2>
-          <p class="detail-author">${escapeHtml(detail.author ? `作者：${detail.author}` : '作者信息暂缺')}</p>
-          <div class="detail-tags">${(detail.tags || []).slice(0, 8).map(tag => `<span>${escapeHtml(tag)}</span>`).join('') || '<span>暂无标签</span>'}</div>
-          <div class="detail-stats"><div><strong>${detail.page_count || '—'}</strong><small>页数</small></div><div><strong>${(detail.tags || []).length}</strong><small>标签</small></div></div>
-          <div class="detail-actions"><button class="primary-button" id="detailSelectButton">${icon(selected ? 'check' : 'plus')}${selected ? '已在清单中' : '加入下载清单'}</button><button class="secondary-button" data-close-modal>返回</button></div>
-        </div>
-      </div>`;
-      $('#detailSelectButton').addEventListener('click', () => {
-        toggleSelected(id, { id, title: detail.title || item?.title });
-        const nowSelected = state.selected.has(String(id));
-        $('#detailSelectButton').innerHTML = `${icon(nowSelected ? 'check' : 'plus')}${nowSelected ? '已在清单中' : '加入下载清单'}`;
+      const [detail, book]=await Promise.all([
+        api(`/api/album/${encodeURIComponent(id)}`,{signal}),
+        api(`/api/reader/albums/${encodeURIComponent(id)}`,{signal}).catch(()=>null)
+      ]);
+      if(serial!==state.detailSerial||signal.aborted)return;
+      const selected=state.selected.has(String(id)),src=coverUrl(id),progress=book?.progress;
+      const readLabel=progress?`继续阅读 · 第 ${Number(progress.page)+1} 页`:'开始阅读';
+      $('#detailContent').innerHTML=`<div class="detail-hero">
+        <div class="detail-cover-wrap"><span class="cover-placeholder">J</span>${src?`<img class="detail-cover" src="${src}" alt="" onerror="this.style.display='none'">`:''}</div>
+        <div class="detail-info"><span class="detail-overline">JM ${escapeHtml(detail.id||id)}</span><h2 id="detailTitle">${escapeHtml(detail.title||item?.title||`作品 ${id}`)}</h2>
+          <p class="detail-author">${escapeHtml(detail.author?`作者：${detail.author}`:'作者信息暂缺')}</p>
+          <div class="detail-tags">${(detail.tags||[]).slice(0,8).map(t=>`<span>${escapeHtml(t)}</span>`).join('')||'<span>暂无标签</span>'}</div>
+          <div class="detail-stats"><div><strong>${detail.page_count||'—'}</strong><small>页数</small></div><div><strong>${book?.chapters?.length||'—'}</strong><small>章节</small></div></div>
+          <div class="detail-actions"><button class="primary-button" id="detailReadButton">${icon('book')}${readLabel}</button><button class="secondary-button" id="detailSelectButton">${icon(selected?'check':'plus')}${selected?'已在清单中':'加入下载清单'}</button></div>
+          ${progress?'<div class="detail-read-secondary"><button id="detailRestartButton">从第一章开始</button></div>':''}
+        </div></div>
+        ${book?.chapters?.length?`<details class="detail-chapter-list"><summary aria-expanded="false" aria-controls="detailChapterBody"><span>章节目录 · ${book.chapters.length} 章</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="detail-chapter-body" id="detailChapterBody" inert><div class="detail-chapter-items">${book.chapters.map(c=>`<button data-detail-read-chapter="${escapeHtml(c.id)}"><span>${c.sort||''}</span><b>${escapeHtml(c.title)}</b><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>`).join('')}</div></div></details>`:''}`;
+      bindDetailChapters();
+      $('#detailReadButton').onclick=()=>window.JMReader.open(String(id));
+      if($('#detailRestartButton'))$('#detailRestartButton').onclick=()=>window.JMReader.open(String(id),{fromStart:true});
+      $$('#detailContent [data-detail-read-chapter]').forEach(b=>b.onclick=()=>window.JMReader.open(String(id),{chapter:b.dataset.detailReadChapter,page:0}));
+      $('#detailSelectButton').onclick=()=>{toggleSelected(id,{id,title:detail.title||item?.title});const active=state.selected.has(String(id));$('#detailSelectButton').innerHTML=`${icon(active?'check':'plus')}${active?'已在清单中':'加入下载清单'}`;};
+    }catch(error){if(serial!==state.detailSerial||error.name==='AbortError')return;$('#detailContent').innerHTML=`<div class="detail-loading">${icon('info')}<strong>详情读取失败</strong><p>${escapeHtml(error.message)}</p></div>`;}
+  }
+
+  function bindDetailChapters() {
+    const details = $('#detailContent .detail-chapter-list');
+    if (!details) return;
+    const summary = $('summary', details), body = $('.detail-chapter-body', details), items = $('.detail-chapter-items', details);
+    let expanded = false, animation = null, version = 0;
+    summary.addEventListener('click', event => {
+      event.preventDefault();
+      const request = ++version, start = body.getBoundingClientRect().height;
+      animation?.cancel();
+      expanded = !expanded;
+      details.open = true; // Keep content renderable until the closing transition completes.
+      details.dataset.expanded = String(expanded);
+      summary.setAttribute('aria-expanded', String(expanded));
+      body.inert = !expanded;
+      if (!expanded && body.contains(document.activeElement)) summary.focus();
+      const end = expanded ? items.getBoundingClientRect().height : 0;
+      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      body.style.height = `${end}px`;
+      const settle = () => {
+        details.open = expanded;
+        // Let chapter labels reflow when the window or text size changes.
+        body.style.height = expanded ? 'auto' : '0px';
+        delete details.dataset.animating;
+        animation = null;
+      };
+      if (reducedMotion || Math.abs(end - start) < 1) {
+        settle();
+        return;
+      }
+      details.dataset.animating = 'true';
+      animation = body.animate([{height:`${start}px`}, {height:`${end}px`}], {
+        duration: 200, easing: 'cubic-bezier(.2, .7, .25, 1)'
       });
-    } catch (error) {
-      $('#detailContent').innerHTML = `<div class="detail-loading">${icon('info')}<strong>详情读取失败</strong><p>${escapeHtml(error.message)}</p></div>`;
-    }
+      animation.finished.then(() => {
+        if (request !== version) return;
+        settle();
+      }).catch(() => {}); // Rapid reversal deliberately cancels the previous transition.
+    });
   }
 
   function rememberSearch(query) {
@@ -475,7 +533,7 @@
     state.config = readConfigFromForm();
     setSaveState('saving', '正在保存…');
     clearTimeout(state.saveTimer);
-    state.saveTimer = setTimeout(() => saveConfig(false), 480);
+    state.saveTimer = setTimeout(() => saveConfig(false).catch(() => {}), 480);
   }
 
   async function saveConfig(showFeedback = false) {
@@ -577,6 +635,7 @@
   }
 
   function renderSnapshot(snapshot) {
+    if (snapshot.run_id && snapshot.run_id !== state.snapshot.run_id) state.historyTerminalCache.clear();
     state.snapshot = { running: false, stopping: false, tasks: [], last_success_ids: [], last_failed_ids: [], ...snapshot };
     const tasks = state.snapshot.tasks || [];
     const success = tasks.filter(task => successStatus(task.status)).length;
@@ -595,13 +654,20 @@
     $('#stopAllButton').disabled = !state.snapshot.running || state.snapshot.stopping;
     $('#queueBadge').hidden = !state.snapshot.running;
     renderSelection();
-    renderTasks(tasks);
+    if (state.view === 'queue') renderTasks(tasks);
     syncHistoryFromSnapshot();
   }
 
   function taskPercent(task) {
+    if (successStatus(task.status)) return 100;
+    if (task.total_known === false) return 0;
     if (Number(task.total) > 0) return clamp(Math.round(Number(task.progress || 0) / Number(task.total) * 100), 0, 100);
     return successStatus(task.status) ? 100 : 0;
+  }
+
+  function taskProgressLabel(task) {
+    if (task.total_known === false && !successStatus(task.status)) return `已完成 ${Number(task.progress || 0)} 页`;
+    return `${taskPercent(task)}%`;
   }
 
   function taskLayoutKey(tasks) {
@@ -622,9 +688,9 @@
     const queued = status === 'queued';
     const active = queued || status === 'running';
     const message = task.message || task.detail || '等待处理';
-    return `<article class="task-item is-${escapeHtml(status)}" data-task="${escapeHtml(task.item_id)}">
+    return `<article class="task-item is-${escapeHtml(status)}" data-task="${escapeHtml(task.item_id)}" data-total-known="${task.total_known === false ? '0' : '1'}">
       <span class="task-status-icon">${icon(statusIcon)}</span>
-      <div class="task-main"><div class="task-title-row"><strong>JM ${escapeHtml(task.item_id)}</strong><span>${statusLabel(status)} · ${percent}%</span></div><p title="${escapeHtml(task.detail || task.message)}">${escapeHtml(message)}</p><div class="progress-track"><i style="width:${percent}%"></i></div></div>
+      <div class="task-main"><div class="task-title-row"><strong>JM ${escapeHtml(task.item_id)}</strong><span>${statusLabel(status)} · ${taskProgressLabel(task)}</span></div><p title="${escapeHtml(task.detail || task.message)}">${escapeHtml(message)}</p><div class="progress-track"><i style="width:${percent}%"></i></div></div>
       <div class="task-actions">
         ${queued ? `<button data-reorder="-1" data-id="${escapeHtml(task.item_id)}" title="上移" ${index === 0 ? 'disabled' : ''}>${icon('arrow-up')}</button><button data-reorder="1" data-id="${escapeHtml(task.item_id)}" title="下移" ${index === totalTasks - 1 ? 'disabled' : ''}>${icon('arrow-down')}</button>` : ''}
         ${successStatus(status) ? `<button data-open-task="${escapeHtml(task.base_dir)}" title="打开目录">${icon('folder')}</button>` : ''}
@@ -657,7 +723,8 @@
       const status = task.status || 'queued';
       const percent = taskPercent(task);
       const message = task.message || task.detail || '等待处理';
-      setText($('.task-title-row span', node), `${statusLabel(status)} · ${percent}%`);
+      node.dataset.totalKnown = task.total_known === false ? '0' : '1';
+      setText($('.task-title-row span', node), `${statusLabel(status)} · ${taskProgressLabel(task)}`);
       const detail = $('.task-main p', node);
       setText(detail, message);
       if (detail && detail.title !== String(task.detail || task.message || '')) detail.title = String(task.detail || task.message || '');
@@ -716,7 +783,7 @@
     const entry = { type: event.type || '', level: event.level || 'INFO', message: event.message || '任务状态已更新', item_id: event.item_id || null, time: new Date().toISOString() };
     state.logs = [entry, ...state.logs].slice(0, 80);
     store.set('jm-logs-v2', state.logs);
-    renderLogs();
+    if (state.view === 'queue') renderLogs();
   }
 
   function renderLogs() {
@@ -753,9 +820,12 @@
     (state.snapshot.tasks || []).forEach(task => {
       const status = successIds.has(String(task.item_id)) || successStatus(task.status) ? 'success' : failedIds.has(String(task.item_id)) || task.status === 'failed' || task.status === 'cancelled' ? 'failed' : task.status;
       if (status === 'success' || status === 'failed') {
+        const signature = `${status}|${task.base_dir || ''}`;
+        if (state.historyTerminalCache.get(String(task.item_id)) === signature) return;
+        state.historyTerminalCache.set(String(task.item_id), signature);
         const old = state.history.find(item => String(item.id) === String(task.item_id));
         upsertHistory({ id: String(task.item_id), title: old?.title || `作品 ${task.item_id}`, status, path: task.base_dir || old?.path || state.config.base_dir, time: old?.status === status ? old.time : new Date().toISOString() });
-      }
+      } else state.historyTerminalCache.delete(String(task.item_id));
     });
   }
 
@@ -779,6 +849,16 @@
   }
 
   function handleDownloadEvent(event) {
+    const data = event.data || {};
+    if (data.sequence && data.sequence <= state.eventSequence) return;
+    if (data.sequence) state.eventSequence = data.sequence;
+    if (event.type === 'tasks_delta') {
+      if (data.run_id && state.snapshot.run_id && data.run_id !== state.snapshot.run_id) return;
+      const changed = new Map((data.changed_tasks || []).map(t => [String(t.item_id), t]));
+      state.snapshotEventSerial++;
+      renderSnapshot({ ...state.snapshot, running: data.running, stopping: data.stopping, tasks: state.snapshot.tasks.map(t => changed.get(String(t.item_id)) || t) });
+      return;
+    }
     addLog(event);
     const snapshot = event.data?.snapshot || event.snapshot;
     if (snapshot) {
@@ -830,6 +910,13 @@
       button.classList.remove('is-spinning');
     });
     $('#rankingTabs').addEventListener('click', event => { const button = event.target.closest('[data-rank]'); if (button) loadRanking(button.dataset.rank); });
+    $('#layoutPicker').addEventListener('click', event => {
+      const button = event.target.closest('[data-layout]');
+      if (!button || button.dataset.layout === state.layout) return;
+      state.layout = button.dataset.layout;
+      store.set('jm-layout-v1', state.layout);
+      syncLayout();
+    });
     $('#searchSortTabs').addEventListener('click', event => {
       const button = event.target.closest('[data-search-sort]');
       if (!button || button.dataset.searchSort === state.searchSort) return;
@@ -915,6 +1002,7 @@
 
   async function init() {
     applyTheme();
+    syncLayout();
     bindEvents();
     syncSearchControls();
     renderRecent();
@@ -922,8 +1010,13 @@
     renderLogs();
     renderHistory();
     setConnection('', '正在连接');
-    await Promise.all([loadConfig(), loadTasks(), loadRanking('day')]);
+    // Realtime task status is local; never wait for a remote ranking to connect it.
     connectWebSocket();
+    const readerReady = window.JMReader.init({api,icon,escapeHtml,toast,coverUrl,token,desktopMode,bridgeCall,applyTheme,toggleTheme,
+      closeModals,closePlanner,showView,currentView:()=>state.view,
+      addDownload:book=>{const id=String(book.id);if(!state.selected.has(id))state.selected.set(id,{id,title:book.title});renderSelection();syncAlbumSelection(id);}});
+    loadRanking('day');
+    await Promise.all([loadConfig(), loadTasks(), readerReady]);
     setInterval(() => {
       if (document.hidden) return;
       const socketOpen = state.ws && state.ws.readyState === WebSocket.OPEN;

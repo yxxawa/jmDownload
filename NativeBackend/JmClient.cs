@@ -39,24 +39,69 @@ public sealed class JmClient : IDisposable
     private static readonly Regex ScrambleRegex = new(@"var\s+scramble_id\s*=\s*(\d+)", RegexOptions.Compiled);
     private readonly ConcurrentDictionary<string, string> _scrambleCache = new();
     private readonly HttpClient _http;
-    private readonly SemaphoreSlim _domainInitLock = new(1, 1);
+    public ImagePriorityGate ImageGate { get; } = new();
+    private readonly JmContentCache _cache;
+    private readonly CancellationTokenSource _stop = new();
+    private readonly object _nodeLock = new();
+    private readonly string _nodeFile;
+    private readonly bool _refreshDomains;
     private List<string> _apiDomains = [.. BuiltInApiDomains];
-    private bool _domainsInitialized;
+    private readonly Dictionary<string, DateTime> _cooldown = new(StringComparer.OrdinalIgnoreCase);
+    private string? _lastApiDomain, _lastImageDomain;
+    private int _refreshStarted;
+    private bool _nodesDirty;
 
-    public JmClient()
+    public JmClient(string? appDataRoot = null, HttpClient? http = null, bool refreshDomains = true)
     {
-        var handler = new HttpClientHandler
+        appDataRoot ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JMComicDesktop");
+        _cache = new JmContentCache(appDataRoot);
+        _nodeFile = Path.Combine(appDataRoot, "Cache", "nodes.json");
+        _refreshDomains = refreshDomains;
+        _http = http ?? new HttpClient(new HttpClientHandler
         {
-            AutomaticDecompression = DecompressionMethods.All,
-            UseCookies = true,
-            CookieContainer = new CookieContainer(),
-            UseProxy = true,
-        };
-
-        _http = new HttpClient(handler)
+            AutomaticDecompression = DecompressionMethods.All, UseCookies = true,
+            CookieContainer = new CookieContainer(), UseProxy = true,
+        }) { Timeout = TimeSpan.FromSeconds(30) };
+        try
         {
-            Timeout = TimeSpan.FromSeconds(30),
-        };
+            var node = JsonNode.Parse(File.ReadAllText(_nodeFile));
+            _lastApiDomain = SafeDomain(node?["api"]?.GetValue<string>()) ? node?["api"]?.GetValue<string>() : null;
+            _lastImageDomain = SafeDomain(node?["image"]?.GetValue<string>()) ? node?["image"]?.GetValue<string>() : null;
+            var saved = (node?["domains"] as JsonArray)?.Select(x => x?.GetValue<string>()).Where(SafeDomain).Select(x => x!).ToList();
+            if (saved is { Count: > 0 }) _apiDomains = saved.Concat(BuiltInApiDomains).Distinct().ToList();
+        }
+        catch (Exception e) when (e is IOException or JsonException or InvalidOperationException or UnauthorizedAccessException) { }
+    }
+    private static bool SafeDomain(string? value) => !string.IsNullOrEmpty(value) &&
+        Uri.CheckHostName(value) == UriHostNameType.Dns && !value.Equals("api.zxcbug.com", StringComparison.OrdinalIgnoreCase) &&
+        !value.EndsWith(".api.zxcbug.com", StringComparison.OrdinalIgnoreCase);
+    private IEnumerable<string> OrderedNodes(IEnumerable<string> nodes, string? preferred)
+    {
+        lock (_nodeLock) return nodes.Prepend(preferred ?? "").Where(SafeDomain).Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(d => _cooldown.TryGetValue(d, out var until) && until > DateTime.UtcNow ? 1 : 0)
+            .ThenBy(d => d.Equals(preferred, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
+    }
+    private void NodeFailed(string domain) { lock (_nodeLock) _cooldown[domain] = DateTime.UtcNow.AddSeconds(30); }
+    private void NodeSucceeded(string domain, bool image = false)
+    {
+        lock (_nodeLock)
+        {
+            _cooldown.Remove(domain);
+            var previous = image ? _lastImageDomain : _lastApiDomain;
+            if (string.Equals(previous, domain, StringComparison.OrdinalIgnoreCase) && !_nodesDirty) return;
+            if (image) _lastImageDomain = domain; else _lastApiDomain = domain;
+            _nodesDirty = true;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_nodeFile)!);
+                var tmp = _nodeFile + ".tmp";
+                File.WriteAllText(tmp, new JsonObject { ["api"] = _lastApiDomain, ["image"] = _lastImageDomain,
+                    ["domains"] = new JsonArray(_apiDomains.Select(d => (JsonNode?)JsonValue.Create(d)).ToArray()) }.ToJsonString());
+                File.Move(tmp, _nodeFile, true);
+                _nodesDirty = false;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
     }
 
     public async Task<List<AlbumItemDto>> SearchAsync(
@@ -202,31 +247,61 @@ public sealed class JmClient : IDisposable
         };
     }
 
-    public async Task<byte[]> DownloadCoverAsync(string albumId, CancellationToken cancellationToken)
+    public Task<byte[]> DownloadCoverAsync(string albumId, CancellationToken cancellationToken)
     {
-        var errors = new List<Exception>();
-        foreach (var domain in Shuffled(ImageDomains))
+        albumId = ParseJmId(albumId);
+        return _cache.BytesAsync("cover|" + albumId, TimeSpan.FromDays(1), async ct =>
         {
-            var url = $"https://{domain}/media/albums/{ParseJmId(albumId)}.jpg";
-            try
+            Exception? last = null;
+            foreach (var domain in OrderedNodes(ImageDomains, _lastImageDomain).Take(3))
             {
-                using var request = new HttpRequestMessage(HttpMethod.Get, url);
-                AddImageHeaders(request);
-                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-                if (bytes.Length > 0)
-                {
-                    return bytes;
-                }
+                try { var bytes = await FetchImageBytesAsync($"https://{domain}/media/albums/{albumId}.jpg", ct).ConfigureAwait(false); NodeSucceeded(domain, true); return bytes; }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException) { last = ex; NodeFailed(domain); }
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
-            {
-                errors.Add(ex);
-            }
-        }
+            throw new IOException("封面下载失败: " + albumId, last);
+        }, cancellationToken);
+    }
 
-        throw new InvalidOperationException("封面下载失败: " + albumId, errors.LastOrDefault());
+    public async Task<byte[]> GetImageBytesAsync(PhotoDetailDto photo, string imageName, CancellationToken cancellationToken, Func<int>? priority = null)
+    {
+        Exception? last = null;
+        foreach (var url in BuildImageUrls(photo, imageName).Take(3))
+        {
+            var host = new Uri(url).Host;
+            try { var bytes = await FetchImageBytesAsync(url, cancellationToken, priority).ConfigureAwait(false); NodeSucceeded(host, true); return bytes; }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is IOException or HttpRequestException or OperationCanceledException) { last = ex; NodeFailed(host); }
+        }
+        throw new IOException("图片请求失败（已有限换节点重试）: " + imageName, last);
+    }
+
+    private async Task<byte[]> FetchImageBytesAsync(string url, CancellationToken token, Func<int>? priority = null)
+    {
+        using var slot = await ImageGate.EnterAsync(priority ?? (() => 2), token).ConfigureAwait(false);
+        using var headersCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        headersCts.CancelAfter(TimeSpan.FromSeconds(15));
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        AddImageHeaders(request);
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, headersCts.Token).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        using var bodyCts = CancellationTokenSource.CreateLinkedTokenSource(token);
+        bodyCts.CancelAfter(TimeSpan.FromSeconds(20));
+        await using var stream = await response.Content.ReadAsStreamAsync(bodyCts.Token).ConfigureAwait(false);
+        using var output = new MemoryStream();
+        var buffer = new byte[65536];
+        int read;
+        while ((read = await stream.ReadAsync(buffer, bodyCts.Token).ConfigureAwait(false)) > 0)
+        {
+            if (output.Length + read > 48L * 1024 * 1024) throw new IOException("图片超过 48MB 限制");
+            output.Write(buffer, 0, read);
+        }
+        var bytes = output.ToArray();
+        if (bytes.Length == 0) throw new IOException("图片正文为空");
+        // Never cache a successful HTTP response containing a login/error HTML page.
+        if (response.Content.Headers.ContentType?.MediaType is "text/html" or "application/json") throw new IOException("上游未返回图片");
+        if (!JmImageDecoder.HasImageSignature(bytes)) throw new IOException("上游返回的正文不是有效图片");
+        return bytes;
     }
 
     public async Task DownloadImageAsync(
@@ -237,13 +312,7 @@ public sealed class JmClient : IDisposable
         string? targetSuffix,
         CancellationToken cancellationToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        AddImageHeaders(request);
-        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        var bytes = await FetchImageBytesAsync(url, cancellationToken).ConfigureAwait(false);
         Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
 
         if (!decode || url.Split('?')[0].EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
@@ -263,6 +332,13 @@ public sealed class JmClient : IDisposable
     }
 
     public async Task<string> GetScrambleIdAsync(string photoId, string? albumId, CancellationToken cancellationToken)
+    {
+        var data = await _cache.JsonAsync("scramble|" + ParseJmId(photoId), TimeSpan.FromDays(3),
+            async ct => new JsonObject { ["value"] = await FetchScrambleIdAsync(photoId, albumId, ct).ConfigureAwait(false) }, cancellationToken).ConfigureAwait(false);
+        return data["value"]!.GetValue<string>();
+    }
+
+    private async Task<string> FetchScrambleIdAsync(string photoId, string? albumId, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(albumId) && _scrambleCache.TryGetValue(albumId, out var byAlbum))
         {
@@ -290,15 +366,17 @@ public sealed class JmClient : IDisposable
         var (token, tokenParam) = JmCrypto.TokenAndTokenParam(ts, JmCrypto.AppTokenSecretContent);
         Exception? lastError = null;
 
-        foreach (var domain in await GetApiDomainsAsync(cancellationToken).ConfigureAwait(false))
+        foreach (var domain in (await GetApiDomainsAsync(cancellationToken).ConfigureAwait(false)).Take(3))
         {
             var url = "https://" + domain + urlPath;
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
             AddApiHeaders(request, token, tokenParam);
             try
             {
-                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-                var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attempt.CancelAfter(TimeSpan.FromSeconds(10));
+                using var response = await _http.SendAsync(request, attempt.Token).ConfigureAwait(false);
+                var text = await response.Content.ReadAsStringAsync(attempt.Token).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException($"HTTP {(int)response.StatusCode}: {text}");
@@ -311,10 +389,13 @@ public sealed class JmClient : IDisposable
                 {
                     _scrambleCache[albumId] = scrambleId;
                 }
+                NodeSucceeded(domain);
                 return scrambleId;
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or IOException)
             {
+                NodeFailed(domain);
                 lastError = ex;
             }
         }
@@ -324,11 +405,19 @@ public sealed class JmClient : IDisposable
 
     public void Dispose()
     {
+        _stop.Cancel();
         _http.Dispose();
-        _domainInitLock.Dispose();
+        _cache.Dispose();
     }
 
-    private async Task<JsonObject> ApiGetAsync(
+    private Task<JsonObject> ApiGetAsync(string path, Dictionary<string, string> parameters, CancellationToken cancellationToken)
+    {
+        var key = AppendQuery(path, parameters.OrderBy(p => p.Key).ToDictionary(p => p.Key, p => p.Value));
+        var ttl = path == "/album" ? TimeSpan.FromMinutes(30) : path == "/chapter" ? TimeSpan.FromHours(12) : TimeSpan.FromMinutes(3);
+        return _cache.JsonAsync(key, ttl, ct => ApiFetchAsync(path, parameters, ct), cancellationToken);
+    }
+
+    private async Task<JsonObject> ApiFetchAsync(
         string path,
         Dictionary<string, string> parameters,
         CancellationToken cancellationToken)
@@ -338,15 +427,17 @@ public sealed class JmClient : IDisposable
         var (token, tokenParam) = JmCrypto.TokenAndTokenParam(ts);
         Exception? lastError = null;
 
-        foreach (var domain in await GetApiDomainsAsync(cancellationToken).ConfigureAwait(false))
+        foreach (var domain in (await GetApiDomainsAsync(cancellationToken).ConfigureAwait(false)).Take(3))
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://" + domain + urlPath);
             AddApiHeaders(request, token, tokenParam);
 
             try
             {
-                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-                var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attempt.CancelAfter(TimeSpan.FromSeconds(10));
+                using var response = await _http.SendAsync(request, attempt.Token).ConfigureAwait(false);
+                var text = await response.Content.ReadAsStringAsync(attempt.Token).ConfigureAwait(false);
                 if ((int)response.StatusCode >= 500)
                 {
                     throw new HttpRequestException("JM API 服务器错误: " + (int)response.StatusCode);
@@ -372,10 +463,13 @@ public sealed class JmClient : IDisposable
                     throw new JsonException("JM API 解密结果不是对象: " + decoded);
                 }
 
+                NodeSucceeded(domain);
                 return dataNode;
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or IOException or FormatException or System.Security.Cryptography.CryptographicException)
             {
+                NodeFailed(domain);
                 lastError = ex;
             }
         }
@@ -383,54 +477,28 @@ public sealed class JmClient : IDisposable
         throw new InvalidOperationException("JM API 请求失败: " + path, lastError);
     }
 
-    private async Task<List<string>> GetApiDomainsAsync(CancellationToken cancellationToken)
+    private Task<List<string>> GetApiDomainsAsync(CancellationToken cancellationToken)
     {
-        if (_domainsInitialized)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_refreshDomains && Interlocked.Exchange(ref _refreshStarted, 1) == 0) _ = Task.Run(RefreshDomainsAsync);
+        lock (_nodeLock) return Task.FromResult(OrderedNodes(_apiDomains, _lastApiDomain).ToList());
+    }
+    private async Task RefreshDomainsAsync()
+    {
+        // Background maintenance is not a prerequisite for the first search/ranking.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(4));
+        foreach (var url in ApiDomainServerUrls)
         {
-            return _apiDomains;
-        }
-
-        await _domainInitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (_domainsInitialized)
+            try
             {
-                return _apiDomains;
+                var text = TrimLeadingNonAscii(await _http.GetStringAsync(url, deadline.Token).ConfigureAwait(false));
+                var decoded = JmCrypto.DecodeResponseData(text, string.Empty, JmCrypto.ApiDomainServerSecret);
+                var node = JsonNode.Parse(decoded) as JsonObject;
+                var list = (node?["Server"] as JsonArray)?.Select(x => x?.GetValue<string>()).Where(SafeDomain).Select(x => x!).ToList();
+                if (list is { Count: > 0 }) { lock (_nodeLock) { _apiDomains = list.Concat(BuiltInApiDomains).Distinct().ToList(); _nodesDirty = true; } return; }
             }
-
-            foreach (var url in ApiDomainServerUrls)
-            {
-                try
-                {
-                    var text = await _http.GetStringAsync(url, cancellationToken).ConfigureAwait(false);
-                    text = TrimLeadingNonAscii(text);
-                    var decoded = JmCrypto.DecodeResponseData(text, string.Empty, JmCrypto.ApiDomainServerSecret);
-                    var node = JsonNode.Parse(decoded) as JsonObject;
-                    var servers = node?["Server"] as JsonArray;
-                    var list = servers?
-                        .Select(item => item?.GetValue<string>())
-                        .Where(value => !string.IsNullOrWhiteSpace(value))
-                        .Select(value => value!)
-                        .ToList();
-
-                    if (list is { Count: > 0 })
-                    {
-                        _apiDomains = list;
-                        break;
-                    }
-                }
-                catch
-                {
-                    // Domain update is best-effort; built-in domains remain as fallback.
-                }
-            }
-
-            _domainsInitialized = true;
-            return _apiDomains;
-        }
-        finally
-        {
-            _domainInitLock.Release();
+            catch (Exception e) when (e is HttpRequestException or OperationCanceledException or JsonException or InvalidOperationException or FormatException or System.Security.Cryptography.CryptographicException) { }
         }
     }
 
@@ -574,15 +642,8 @@ public sealed class JmClient : IDisposable
 
     public IEnumerable<string> BuildImageUrls(PhotoDetailDto photo, string imageName)
     {
-        yield return BuildImageUrl(photo, imageName);
-
-        foreach (var domain in ImageDomains)
-        {
-            if (!domain.Equals(photo.ImageDomain, StringComparison.OrdinalIgnoreCase))
-            {
-                yield return $"https://{domain}/media/photos/{photo.Id}/{imageName}";
-            }
-        }
+        foreach (var domain in OrderedNodes(ImageDomains.Prepend(photo.ImageDomain), _lastImageDomain))
+            yield return $"https://{domain}/media/photos/{photo.Id}/{imageName}";
     }
 
     private static string PickImageDomain()

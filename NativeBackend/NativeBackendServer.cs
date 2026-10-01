@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Reflection;
+using System.Threading.Channels;
 
 namespace DesktopShell.NativeBackend;
 
@@ -16,8 +17,10 @@ public sealed class NativeBackendServer : IAsyncDisposable
     private readonly HttpListener _listener = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly ConcurrentDictionary<Guid, WebSocket> _sockets = new();
-    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _socketLocks = new();
-    private readonly JmClient _client = new();
+    private readonly ConcurrentDictionary<Guid, Channel<byte[]>> _socketQueues = new();
+    private readonly JmClient _client;
+    private readonly ImageRepository _images;
+    private readonly ReaderService _reader;
     private readonly AppConfigStore _configStore;
     private readonly NativeDownloadManager _downloadManager;
     private Task? _listenTask;
@@ -32,15 +35,18 @@ public sealed class NativeBackendServer : IAsyncDisposable
         "a", "t", "w", "m",
     };
 
-    public NativeBackendServer()
+    public NativeBackendServer(string? appDataRoot = null, JmClient? client = null, string? projectRoot = null)
     {
-        ProjectRoot = ResolveProjectRoot();
-        AppDataRoot = Path.Combine(
+        ProjectRoot = projectRoot ?? ResolveProjectRoot();
+        AppDataRoot = appDataRoot ?? Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "JMComicDesktop");
         FrontendRoot = Path.Combine(ProjectRoot, "frontend");
         _configStore = new AppConfigStore(AppDataRoot);
-        _downloadManager = new NativeDownloadManager(_client, PublishEvent);
+        _client = client ?? new JmClient(AppDataRoot);
+        _images = new ImageRepository(_client, AppDataRoot);
+        _reader = new ReaderService(_client, _images, AppDataRoot);
+        _downloadManager = new NativeDownloadManager(_client, PublishEvent, _images, _reader.Store);
     }
 
     public int Port { get; private set; }
@@ -121,6 +127,10 @@ public sealed class NativeBackendServer : IAsyncDisposable
             }
         }
 
+        await _downloadManager.StopAsync().ConfigureAwait(false);
+        _downloadManager.Dispose();
+        _reader.Dispose();
+        _images.Dispose();
         _client.Dispose();
         _cts.Dispose();
     }
@@ -147,7 +157,7 @@ public sealed class NativeBackendServer : IAsyncDisposable
                 continue;
             }
 
-            _ = Task.Run(() => HandleContextAsync(context), _cts.Token);
+            _ = HandleContextAsync(context);
         }
     }
 
@@ -172,10 +182,9 @@ public sealed class NativeBackendServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            if (context.Response.OutputStream.CanWrite)
-            {
-                await WriteJsonAsync(context.Response, 500, new { detail = ex.Message }).ConfigureAwait(false);
-            }
+            var status = ex is ArgumentException or System.Text.Json.JsonException ? 400 : ex is KeyNotFoundException ? 404 : ex is OperationCanceledException ? 409 : 500;
+            try { await WriteJsonAsync(context.Response, status, new { detail = ex.Message }).ConfigureAwait(false); }
+            catch (Exception e) when (e is HttpListenerException or IOException or ObjectDisposedException) { }
         }
     }
 
@@ -195,6 +204,9 @@ public sealed class NativeBackendServer : IAsyncDisposable
             }).ConfigureAwait(false);
             return;
         }
+
+        if (path.StartsWith("/api/reader/", StringComparison.Ordinal))
+        { await RouteReaderAsync(context, cancellationToken).ConfigureAwait(false); return; }
 
         if (request.HttpMethod == "GET" && path == "/api/session")
         {
@@ -327,18 +339,7 @@ public sealed class NativeBackendServer : IAsyncDisposable
         if (request.HttpMethod == "POST" && path.StartsWith("/api/download/cancel/", StringComparison.Ordinal))
         {
             var itemId = WebUtility.UrlDecode(path["/api/download/cancel/".Length..]);
-            var body = await ReadJsonAsync<System.Text.Json.Nodes.JsonNode>(request).ConfigureAwait(false);
-            var baseDir = body?["base_dir"]?.GetValue<string>();
-            var outputFormat = body?["output_format"]?.GetValue<string>();
-            // H1: validate baseDir is under configured download root to prevent path traversal
-            if (!string.IsNullOrWhiteSpace(baseDir))
-            {
-                var configuredRoot = Path.GetFullPath(_configStore.Load().BaseDir);
-                var requestedDir   = Path.GetFullPath(baseDir);
-                if (!requestedDir.StartsWith(configuredRoot, StringComparison.OrdinalIgnoreCase))
-                    baseDir = null; // reject out-of-root path; fall back to job's own baseDir
-            }
-            await WriteJsonAsync(response, 200, new { cancelled = _downloadManager.CancelTask(itemId, baseDir, outputFormat) }).ConfigureAwait(false);
+            await WriteJsonAsync(response, 200, new { cancelled = _downloadManager.CancelTask(itemId) }).ConfigureAwait(false);
             return;
         }
 
@@ -360,6 +361,50 @@ public sealed class NativeBackendServer : IAsyncDisposable
         await ServeStaticAsync(context).ConfigureAwait(false);
     }
 
+    private async Task RouteReaderAsync(HttpListenerContext context, CancellationToken token)
+    {
+        var request = context.Request; var response = context.Response;
+        var segments = (request.Url?.AbsolutePath ?? "").Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var method = request.HttpMethod;
+        var resource = segments.Length > 2 ? segments[2] : "";
+        var id = segments.Length > 3 ? WebUtility.UrlDecode(segments[3]) : "";
+        object? result = null;
+        if (method == "GET" && resource == "albums" && id != "") result = await _reader.BookAsync(id, token).ConfigureAwait(false);
+        else if (method == "GET" && resource == "chapters" && id != "") result = await _reader.ChapterAsync(request.QueryString["session"] ?? "", id, token).ConfigureAwait(false);
+        else if (method == "GET" && resource == "images" && segments.Length == 5)
+        {
+            if (!int.TryParse(segments[4], out var index)) throw new ArgumentException("页码无效");
+            var file = await _reader.ImageAsync(request.QueryString["session"] ?? "", id, index, token).ConfigureAwait(false);
+            await using var stream = _images.OpenRead(file);
+            response.StatusCode = 200; response.ContentType = ContentTypeFor(file);
+            response.Headers["Cache-Control"] = "private, max-age=86400";
+            response.ContentLength64 = stream.Length;
+            await stream.CopyToAsync(response.OutputStream, token).ConfigureAwait(false); response.Close(); return;
+        }
+        else if (method == "POST" && resource == "sessions")
+        { var body = await ReadJsonAsync<JsonObject>(request).ConfigureAwait(false); result = await _reader.OpenAsync(body?["album_id"]?.GetValue<string>() ?? "", token).ConfigureAwait(false); }
+        else if (method == "PATCH" && resource == "sessions" && id != "" && segments.Length == 5 && segments[4] == "window")
+        {
+            var body = await ReadJsonAsync<JsonObject>(request).ConfigureAwait(false) ?? new();
+            _reader.Window(id, body["chapter_id"]?.GetValue<string>() ?? "", body["start"]?.GetValue<int>() ?? 0, body["end"]?.GetValue<int>() ?? 0, body["revision"]?.GetValue<long>() ?? 0);
+            result = new { updated = true };
+        }
+        else if (method == "DELETE" && resource == "sessions" && id != "") result = new { closed = _reader.Close(id) };
+        else if (method == "PUT" && resource == "progress" && id != "") result = _reader.Progress(id, await ReadJsonAsync<ReaderProgress>(request).ConfigureAwait(false) ?? new());
+        else if (method == "GET" && resource == "shelf") result = _reader.Shelf();
+        else if (method == "DELETE" && resource == "shelf" && id != "") { _reader.Store.Remove(id); result = new { removed = true }; }
+        else if (method == "PUT" && resource == "favorites" && id != "")
+        { var body = await ReadJsonAsync<JsonObject>(request).ConfigureAwait(false); result = _reader.Store.Favorite(id, body?["favorite"]?.GetValue<bool>() ?? false); }
+        else if (method == "GET" && resource == "bookmarks") result = new { bookmarks = _reader.Store.Bookmarks(request.QueryString["album_id"]) };
+        else if (method == "POST" && resource == "bookmarks") result = new { bookmarked = _reader.Store.ToggleBookmark(await ReadJsonAsync<ReaderBookmark>(request).ConfigureAwait(false) ?? new()) };
+        else if (method == "GET" && resource == "settings") result = _reader.Store.Settings;
+        else if (method == "PUT" && resource == "settings") result = _reader.Settings(await ReadJsonAsync<ReaderSettings>(request).ConfigureAwait(false) ?? new());
+        else if (method == "GET" && resource == "cache") result = _images.Stats();
+        else if (method == "DELETE" && resource == "cache") result = new { removed = _images.Clear(), cache = _images.Stats() };
+        if (result is null) { await WriteJsonAsync(response, 404, new { detail = "reader route not found" }).ConfigureAwait(false); return; }
+        await WriteJsonAsync(response, 200, result).ConfigureAwait(false);
+    }
+
     private async Task ServeStaticAsync(HttpListenerContext context)
     {
         var path = context.Request.Url?.AbsolutePath ?? "/";
@@ -372,7 +417,7 @@ public sealed class NativeBackendServer : IAsyncDisposable
         var diskRelativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
         var fullPath = Path.GetFullPath(Path.Combine(FrontendRoot, diskRelativePath));
         var frontendRoot = Path.GetFullPath(FrontendRoot);
-        if (!fullPath.StartsWith(frontendRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+        if (!fullPath.StartsWith(frontendRoot.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
         {
             if (await ServeEmbeddedStaticAsync(context, relativePath).ConfigureAwait(false))
             {
@@ -429,8 +474,9 @@ public sealed class NativeBackendServer : IAsyncDisposable
         var socket = wsContext.WebSocket;
         var id = Guid.NewGuid();
         _sockets[id] = socket;
-        _socketLocks[id] = new SemaphoreSlim(1, 1);
-
+        var queue = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(128) { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+        _socketQueues[id] = queue;
+        var sender = SendLoopAsync();
         var buffer = new byte[1024];
         try
         {
@@ -440,49 +486,39 @@ public sealed class NativeBackendServer : IAsyncDisposable
                 if (result.MessageType == WebSocketMessageType.Close) break;
             }
         }
-        catch { /* Client disconnected. */ }
+        catch (Exception e) when (e is WebSocketException or OperationCanceledException or ObjectDisposedException) { }
         finally
         {
-            _sockets.TryRemove(id, out _);
-            if (_socketLocks.TryRemove(id, out var sem)) sem.Dispose();
+            _sockets.TryRemove(id, out _); _socketQueues.TryRemove(id, out _);
+            queue.Writer.TryComplete(); socket.Abort();
+            try { await sender.ConfigureAwait(false); } catch { }
             socket.Dispose();
+        }
+        async Task SendLoopAsync()
+        {
+            try
+            {
+                await foreach (var bytes in queue.Reader.ReadAllAsync(_cts.Token).ConfigureAwait(false))
+                {
+                    using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+                    deadline.CancelAfter(TimeSpan.FromSeconds(5));
+                    await socket.SendAsync(bytes, WebSocketMessageType.Text, true, deadline.Token).ConfigureAwait(false);
+                }
+            }
+            catch { socket.Abort(); }
         }
     }
 
     private void PublishEvent(DownloadEventDto evt)
     {
-        var payload = JsonSerializer.Serialize(evt, NativeJson.ApiOptions);
-        var bytes = Encoding.UTF8.GetBytes(payload);
-
-        foreach (var (id, socket) in _sockets.ToArray())
+        if (_sockets.IsEmpty) return;
+        var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(evt, NativeJson.ApiOptions));
+        foreach (var (id, socket) in _sockets)
         {
-            if (socket.State != WebSocketState.Open)
-            {
-                _sockets.TryRemove(id, out _);
-                if (_socketLocks.TryRemove(id, out var s)) s.Dispose();
-                socket.Dispose();
-                continue;
-            }
-
-            if (!_socketLocks.TryGetValue(id, out var sem)) continue;
-
-            _ = Task.Run(async () =>
-            {
-                bool acquired = false;
-                try
-                {
-                    await sem.WaitAsync(_cts.Token).ConfigureAwait(false);
-                    acquired = true;
-                    await socket.SendAsync(bytes, WebSocketMessageType.Text, true, _cts.Token).ConfigureAwait(false);
-                }
-                catch
-                {
-                    _sockets.TryRemove(id, out _);
-                    if (_socketLocks.TryRemove(id, out var s2)) s2.Dispose();
-                    socket.Dispose();
-                }
-                finally { if (acquired) sem.Release(); }
-            });
+            if (!_socketQueues.TryGetValue(id, out var queue)) continue;
+            // Never enqueue unbounded Tasks. A slow connection reconnects and loads a full snapshot.
+            if (socket.State != WebSocketState.Open || !queue.Writer.TryWrite(bytes))
+            { queue.Writer.TryComplete(); socket.Abort(); }
         }
     }
 
@@ -501,7 +537,9 @@ public sealed class NativeBackendServer : IAsyncDisposable
         // Browser image elements cannot attach the API Authorization header.
         // Permit the local cover endpoint to use the same short-lived token in
         // its query string so covers can begin loading immediately.
-        return request.Url?.AbsolutePath.StartsWith("/api/cover/", StringComparison.Ordinal) == true
+        var path = request.Url?.AbsolutePath ?? "";
+        return (path.StartsWith("/api/cover/", StringComparison.Ordinal) ||
+                (path.StartsWith("/api/reader/images/", StringComparison.Ordinal) && path.Split('/', StringSplitOptions.RemoveEmptyEntries).Length == 5))
                && request.QueryString["token"] == Token;
     }
 
@@ -562,6 +600,8 @@ public sealed class NativeBackendServer : IAsyncDisposable
             ".png" => "image/png",
             ".jpg" or ".jpeg" => "image/jpeg",
             ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
             ".svg" => "image/svg+xml",
             _ => "application/octet-stream",
         };

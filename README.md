@@ -1,175 +1,163 @@
-<div align="center">
-
 # JM Download
 
-**找到想看的，剩下交给队列。**
+**JM Download** 是一款面向 Windows 的漫画检索、整理、下载与在线阅读桌面程序。桌面外壳使用 WPF，工作区使用 WebView2，应用本地后端使用 C#/.NET 实现。
 
-一个面向 Windows 的 JMComic 桌面下载工具，提供搜索、榜单、批量队列、记录管理与多格式输出。
+![应用界面预览](assets/app-preview.png)
 
-![Windows](https://img.shields.io/badge/Windows-x64%20%7C%20ARM64-347A5B?style=flat-square&logo=windows11&logoColor=white)
-![.NET](https://img.shields.io/badge/.NET-9-225F44?style=flat-square&logo=dotnet&logoColor=white)
-![UI](https://img.shields.io/badge/UI-WPF%20%2B%20WebView2-4D9672?style=flat-square)
-![Backend](https://img.shields.io/badge/Backend-C%23-347A5B?style=flat-square&logo=csharp&logoColor=white)
+> 本项目为独立第三方工具，与相关内容平台无隶属或官方合作关系。程序不会托管漫画内容；访问、下载或保存内容前，请确认你有权这样做，并遵守所在地法律及相关平台条款。
 
-</div>
+## 功能
 
-## 界面预览
+### 发现与管理
 
-<img src="assets/app-preview.png" width="100%" alt="JM Download 主界面"/>
+- 关键词搜索、作品 ID 搜索和排行榜浏览。
+- 作品详情、封面、作者、章节与标签展示。
+- 下载队列、任务进度、取消/停止、任务排序。
+- 导出为图片目录、ZIP 或 PDF；可配置图片格式和 PDF 组织方式。
+- 下载目录、并发数和界面偏好保存在本机。
 
-界面采用与程序一致的低饱和绿色主题，以搜索、选择、队列和下载为主线，常用操作集中在一个工作区内完成。
+### 在线阅读
 
-## 主要功能
+- 从作品详情打开阅读器；支持竖向滚动、单页和双页模式。
+- 支持章节目录、上一页/下一页、上一章/下一章、页码跳转和进度滑块。
+- 阅读方向、页面适配、缩放、明暗主题、专注模式与全屏。
+- 书架、收藏、书签、阅读进度和阅读设置持久化保存。
+- 按需加载章节；邻近图片预读、图片缓存上限设置、失败页面重试。
+- 阅读器可将已下载完成的本地作品加入本地书架。
 
-| 模块 | 功能 |
-| --- | --- |
-| **搜索** | 按标题、作者或作品 ID 搜索，支持时间筛选与结果排序 |
-| **榜单** | 浏览日榜、周榜和月榜，刷新时保留当前选择 |
-| **批量选择** | 从搜索结果或榜单中加入多个作品，也可直接粘贴多个 ID |
-| **下载队列** | 展示等待、运行、完成与失败状态，下载过程中局部更新列表 |
-| **输出格式** | 支持图片目录、ZIP 和 PDF |
-| **资源复用** | 已存在的图片、ZIP 或 PDF 可直接转换，减少重复下载 |
-| **任务记录** | 查看历史任务、输出位置和执行结果 |
-| **外观设置** | 支持浅色与深色模式，设置会自动保存 |
+## 运行要求
 
-### 搜索筛选与排序
+- Windows 10/11 x64 或 Windows on ARM64。
+- Microsoft Edge **WebView2 Runtime**。应用使用 Evergreen Runtime；如果目标设备没有该运行时，请先安装 WebView2 Runtime。
+- 开发构建需要 .NET SDK 9 和 Windows 桌面开发组件。发布版通过 `dotnet publish` 自包含发布 .NET，不要求用户另外安装 .NET Runtime。
 
-- 时间范围：全部、今天、本周、本月
-- 排序方式：相关度、最新、浏览量、页数、收藏量
-- 支持普通关键词、作品 ID 与批量 ID
+**版本提示：** 当前项目目标框架为 `net9.0-windows`。截至 2026-10-01，.NET 9 的官方支持结束日期为 **2026-11-10**。维护者发布新版本前应评估迁移到受支持的目标框架；迁移前请勿把本仓库的当前目标框架描述为长期支持版本。
 
-### 下载与输出
+## 获取构建产物
 
-- 多作品批量下载
-- 按作品自动创建目录
-- 图片后缀转换
-- ZIP 打包
-- PDF 合并或按章节导出
-- 下载并发与图片并发设置
-- 已有目标格式自动识别
+仓库中的 GitHub Actions 工作流会在 `main`/`master` 分支推送、Pull Request 或手动触发时构建并自检 Windows x64 与 ARM64 版本。成功运行后，可从对应工作流运行页面下载构建产物：
 
-## 下载使用
+| 设备 | Actions 产物名称 | 包内可执行文件 |
+| --- | --- | --- |
+| 常见 Intel / AMD Windows 电脑 | `JMDownload-win-x64` | `DesktopShell.exe` |
+| Windows on ARM64 | `JMDownload-win-arm64` | `DesktopShell.exe` |
 
-前往项目的 [**Releases**](https://github.com/yxxawa/jmDownload/releases/latest) 页面，根据设备架构选择：
+该工作流上传的是 Actions 构建产物，不会自动创建 GitHub Release。维护者如需发布正式版本，应先完成人工检查，再将对应程序包附加到 GitHub Release。首次运行时仍需要系统中的 WebView2 Runtime。开发者也可使用下文的发布脚本在本机生成程序包。
 
-| 设备 | 文件 |
-| --- | --- |
-| 常见 Intel / AMD Windows 电脑 | `JMDownload-win-x64.exe` |
-| Windows on ARM 设备 | `JMDownload-win-arm64.exe` |
+## 从源码构建
 
-下载后直接运行单文件 EXE。
-
-### 运行环境
-
-发布版采用自包含方式，`.NET 9 Desktop Runtime` 已包含在 EXE 中。
-
-程序使用系统安装的 **Microsoft Edge WebView2 Evergreen Runtime** 显示界面，发布包不携带 WebView2 浏览器运行时。Windows 11 以及多数较新的 Windows 10 环境通常已经安装该组件。
-
-## 基本流程
-
-1. 在搜索框输入标题、作者或作品 ID。
-2. 使用筛选和排序缩小结果范围。
-3. 点击卡片右上角按钮，将作品加入右侧下载清单。
-4. 选择图片、ZIP 或 PDF 输出格式。
-5. 设置保存位置和并发参数。
-6. 点击 **开始下载**，在任务页查看实时进度。
-
-快捷键：
-
-| 快捷键 | 操作 |
-| --- | --- |
-| `Ctrl + K` | 聚焦搜索框 |
-| `Ctrl + Enter` | 开始下载 |
-
-## 数据位置
-
-| 数据 | 默认位置 |
-| --- | --- |
-| 下载内容 | EXE 所在目录下的 `JMDownLoad` |
-| 用户设置 | `%LOCALAPPDATA%\JMComicDesktop\config.json` |
-| WebView2 用户数据 | `%LOCALAPPDATA%\JMComicDesktop\WebView2` |
-| 下载索引 | 下载目录中的 `.jmdownload_index.json` |
-
-保存位置可在程序右侧面板中随时修改。
-
-## 本地构建
-
-需要：
-
-- Windows
-- .NET 9 SDK
-- Microsoft Edge WebView2 Runtime
+先安装 .NET SDK 9，然后在仓库根目录运行：
 
 ```powershell
-dotnet restore
-dotnet build DesktopShell.csproj -c Release
-dotnet run --project DesktopShell.csproj
+./scripts/build.ps1
 ```
 
-## 发布单文件 EXE
-
-项目已内置单文件发布参数。WebView2 Evergreen Runtime 保持为系统组件，不写入发布包。
+也可以直接使用 .NET CLI：
 
 ```powershell
-# Windows x64
-dotnet publish DesktopShell.csproj `
+dotnet restore .\DesktopShell.csproj
+dotnet build .\DesktopShell.csproj -c Release -p:SmokeTest=false
+```
+
+运行桌面应用：
+
+```powershell
+dotnet run --project .\DesktopShell.csproj -c Release -p:SmokeTest=false
+```
+
+> **重要：** 桌面 GUI 构建应使用 `SmokeTest=false`（脚本已固定传入）。`SmokeTest=true` 会切换到后端冒烟测试入口，该模式会启动后端并在测试结束后退出，不会显示桌面窗口。不要将 SmokeTest 构建产物当作 GUI 发布。
+
+## 发布单文件程序
+
+在 Windows 上执行：
+
+```powershell
+./scripts/publish.ps1 -RuntimeIdentifier win-x64
+./scripts/publish.ps1 -RuntimeIdentifier win-arm64
+```
+
+发布目录默认为 `release/<RID>/`。等价 CLI 命令：
+
+```powershell
+dotnet publish .\DesktopShell.csproj `
   -c Release `
   -r win-x64 `
-  -o artifacts/single-file/win-x64
-
-# Windows ARM64
-dotnet publish DesktopShell.csproj `
-  -c Release `
-  -r win-arm64 `
-  -o artifacts/single-file/win-arm64
+  -p:SmokeTest=false `
+  -o .\release\win-x64
 ```
 
-发布参数包括：
+ARM64 构建时将 `win-x64` 改为 `win-arm64`。程序包包含对应架构的 .NET 运行时与应用依赖；WebView2 Evergreen Runtime 仍由目标设备提供。
 
-- 自包含 .NET 9 Desktop Runtime
-- 单文件输出
-- 单文件压缩
-- 按目标架构包含必要的原生加载组件
-- 外部使用系统 WebView2 Evergreen Runtime
-- 保留完整 WPF 与 WebView2 托管调用，关闭裁剪以保证稳定性
+## 运行打包自检
+
+自检验证发布程序内的前端资源、阅读器 API 身份验证及阅读器初始状态，不打开 GUI，也不向上游站点发送请求：
+
+```powershell
+./scripts/selfcheck.ps1 -ExecutablePath .\release\win-x64\DesktopShell.exe
+```
+
+也可直接运行：
+
+```powershell
+.\release\win-x64\DesktopShell.exe --selfcheck .\artifacts\selfcheck.json
+```
+
+成功时进程退出码为 `0`，报告中的 `result` 为 `PASS`。此外，`NativeBackendSmoke.cs` 提供后端和本地文件导出冒烟测试；它与上述发布包自检用途不同，详细说明见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
 
 ## 项目结构
 
 ```text
-jmDownload/
-├── assets/
-│   └── app-preview.png           README 界面预览
+.
+├── .github/workflows/       # Windows x64/ARM64 CI 与发布产物
+├── assets/                  # README 预览图等静态素材
+├── docs/                    # 架构、开发与发布说明
 ├── frontend/
-│   ├── index.html                页面结构
-│   ├── styles.css                主题与布局
-│   └── app.js                    前端状态与交互
+│   ├── index.html           # 工作区结构与阅读器 DOM
+│   ├── styles.css           # 主界面主题与布局
+│   ├── app.js               # 搜索、作品详情、下载队列与书架交互
+│   ├── reader.js            # 在线阅读器状态和交互
+│   └── reader.css           # 阅读器布局和主题
 ├── NativeBackend/
-│   ├── JmClient.cs               API 与数据请求
-│   ├── NativeDownloadManager.cs  队列和下载流程
-│   ├── ArtifactTools.cs          ZIP / PDF / 图片处理
-│   └── AppConfigStore.cs         设置持久化
-├── MainWindow.xaml               WPF 桌面窗口
-├── MainWindow.xaml.cs            WebView2 生命周期
-└── DesktopShell.csproj           项目与发布配置
+│   ├── NativeBackendServer.cs # 回环 HTTP/WebSocket 服务与 API 路由
+│   ├── JmClient.cs            # 上游请求、作品数据与图片地址
+│   ├── ReaderService.cs       # 阅读会话、章节加载与预读
+│   ├── ReaderStore.cs         # 书架、进度、书签和设置持久化
+│   ├── ImageRepository.cs     # 阅读/封面图片缓存与读取
+│   ├── NativeDownloadManager.cs # 下载队列和任务状态
+│   └── ArtifactTools.cs       # 图片、ZIP、PDF 等文件处理
+├── scripts/                  # 可重复的构建、发布、自检命令
+├── App.xaml                  # WPF 应用入口与资源
+├── MainWindow.xaml           # 桌面窗口
+├── MainWindow.xaml.cs        # 后端与 WebView2 生命周期
+├── DesktopBridge.cs          # 桌面文件选择等桥接
+├── WebViewBridge.cs          # WebView2 初始化与本地 API 授权
+├── NativeBackendSmoke.cs     # 可选后端/文件导出冒烟测试入口
+└── DesktopShell.csproj       # WPF、资源嵌入与发布配置
 ```
 
-## 技术结构
+更完整的组件关系与本地 API 说明见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。贡献前请阅读 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+
+## 本地数据与隐私
+
+应用默认将设置、缓存与阅读数据写入当前 Windows 用户的本地应用数据目录：
 
 ```text
-WPF Desktop Shell
-        │
-        ├── WebView2 UI
-        │       └── HTML / CSS / JavaScript
-        │
-        └── C# Native Backend
-                ├── Local HTTP API
-                ├── Search & Ranking
-                ├── Download Queue
-                └── Image / ZIP / PDF Pipeline
+%LOCALAPPDATA%\JMComicDesktop\
 ```
 
-前端资源以嵌入资源形式随程序发布，后端、下载器与格式处理均由 C# 实现。
+其中包含配置、缓存节点信息、阅读进度/书架/书签/设置，以及 WebView2 用户数据。下载文件默认写入应用目录下的 `JMDownLoad`，用户可以在应用中更改目录。不要将个人配置、浏览器数据、访问令牌或下载内容提交到 Git 仓库。
 
-## 说明
+本地后端仅绑定到 `127.0.0.1` 的动态端口，并为会话生成随机令牌；不要将此本地服务改为监听公网网卡，也不要在 issue、日志或截图中公开令牌和个人数据。
 
-本项目用于技术交流与个人工具开发。下载内容的相关权利归原作者及对应平台所有，请遵守所在地规则与平台条款。
+## 开源许可与发布前检查
+
+当前源码快照**没有附带 LICENSE 文件**。GitHub 仓库设为公开并不自动授予他人复制、修改或再分发代码的许可。发布前请确认你对所有源码、图标和预览图拥有相应权利，并选择适合的许可证；在许可证确定前，不要声称本项目使用 MIT 或其他许可证。也请复核上游 API 使用方式、相关服务条款和内容版权要求。检查清单见 [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)。
+
+## 致谢
+
+- Microsoft .NET、WPF 与 WebView2。
+- 本项目使用的第三方 NuGet 包及其许可证信息见项目文件与各包的上游说明。
+
+---
+
+English summary: JM Download is a Windows desktop application for comic discovery, downloads, library management, and online reading, built with WPF, WebView2, and a C# local backend.

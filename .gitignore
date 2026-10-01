@@ -1,8 +1,9 @@
-# Build output
+# .NET build and publish output
 [Bb]in/
 [Oo]bj/
 [Aa]rtifacts/
 [Pp]ublish/
+/release/
 TestResults/
 
 # IDE and user-specific files
@@ -14,7 +15,7 @@ TestResults/
 *.userosscache
 *.sln.docstates
 
-# Temporary files and logs
+# Logs and temporary files
 .ui-test/
 *.log
 *.tmp
@@ -22,12 +23,15 @@ TestResults/
 *.bak
 *.cache
 
-# Runtime data
+# Local app/runtime data and credentials
 /JMDownLoad/
 /config.json
+/appsettings.local.json
+*.token
 **/.jmdownload_index.json
+**/.jmdownload-complete.json
 
-# NuGet
+# NuGet packages
 packages/
 *.nupkg
 *.snupkg

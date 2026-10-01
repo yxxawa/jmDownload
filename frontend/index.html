@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark" />
   <title>JM Download</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="reader.css" />
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -34,6 +35,15 @@
     <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6V3Z"/><path d="M14 3v5h5M9 13h6m-6 4h6"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.3 4.1L17 9l-3.7 1.9L12 15l-1.3-4.1L7 9l3.7-1.9L12 3Z"/><path d="m18.5 14 .7 2.3 2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7.7-2.3Z"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M3 5h7l2 2 2-2h7v15h-7l-2 2-2-2H3V5Z"/><path d="M12 7v15"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4-6 4V3Z"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.7-4L4 9"/><path d="M4 5v4h4"/><path d="M4 13a8 8 0 0 0 14.7 4L20 15"/><path d="M20 19v-4h-4"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="2.5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.6 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.5l6.2-.9L12 3Z"/></symbol>
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
   </svg>
 
@@ -48,13 +58,14 @@
       </div>
 
       <nav class="main-nav">
-        <button class="nav-item is-active" data-view="discover" aria-current="page">
+        <button class="nav-item is-active" data-view="discover" aria-current="page" aria-label="发现" title="发现">
           <svg><use href="#i-compass"/></svg><span>发现</span>
         </button>
-        <button class="nav-item" data-view="queue">
+        <button class="nav-item" data-view="shelf" aria-label="书架" title="书架"><svg><use href="#i-book"/></svg><span>书架</span></button>
+        <button class="nav-item" data-view="queue" aria-label="任务" title="任务">
           <span class="nav-icon-wrap"><svg><use href="#i-download"/></svg><i id="queueBadge" hidden></i></span><span>任务</span>
         </button>
-        <button class="nav-item" data-view="history">
+        <button class="nav-item" data-view="history" aria-label="记录" title="记录">
           <svg><use href="#i-clock"/></svg><span>记录</span>
         </button>
       </nav>
@@ -64,10 +75,10 @@
           <span class="connection-dot"></span>
           <div><strong id="connectionText">正在连接</strong><small>C# 原生服务</small></div>
         </div>
-        <button class="nav-item" id="settingsButton">
+        <button class="nav-item" id="settingsButton" aria-label="偏好设置" title="偏好设置">
           <svg><use href="#i-settings"/></svg><span>偏好设置</span>
         </button>
-        <button class="nav-item" id="themeToggle" aria-label="切换主题">
+        <button class="nav-item" id="themeToggle" aria-label="切换主题" title="切换主题">
           <svg class="theme-icon-light"><use href="#i-sun"/></svg>
           <svg class="theme-icon-dark"><use href="#i-moon"/></svg>
           <span id="themeLabel">深色模式</span>
@@ -79,11 +90,10 @@
       <section class="view is-active" id="view-discover">
         <header class="page-header discover-header">
           <div>
-            <div class="eyebrow"><svg><use href="#i-spark"/></svg> 精简流程 · 安静下载</div>
-            <h1>找到想看的，<span>剩下交给队列。</span></h1>
-            <p>搜索作品、浏览榜单，或直接粘贴多个 ID。设置会自动记住。</p>
+            <h1>发现作品</h1>
+            <p>浏览榜单，或输入标题、作者、作品 ID。</p>
           </div>
-          <button class="icon-button planner-toggle" id="plannerToggleTop" title="打开下载清单">
+          <button class="icon-button planner-toggle" id="plannerToggleTop" title="打开下载清单" aria-label="打开下载清单">
             <svg><use href="#i-list"/></svg><span id="plannerToggleCount">0</span>
           </button>
         </header>
@@ -133,7 +143,11 @@
               <button data-rank="week">本周</button>
               <button data-rank="month">本月</button>
             </div>
-            <button class="icon-button" id="refreshButton" title="刷新"><span class="refresh-glyph">↻</span></button>
+            <div class="layout-toggle" id="layoutPicker" role="group" aria-label="结果布局">
+              <button class="is-active" type="button" data-layout="grid" aria-label="网格视图" aria-pressed="true" title="网格视图"><svg><use href="#i-grid"/></svg></button>
+              <button type="button" data-layout="list" aria-label="列表视图" aria-pressed="false" title="列表视图"><svg><use href="#i-list"/></svg></button>
+            </div>
+            <button class="icon-button" id="refreshButton" title="刷新" aria-label="刷新"><svg><use href="#i-refresh"/></svg></button>
           </div>
         </div>
 
@@ -144,12 +158,17 @@
         </div>
       </section>
 
+      <section class="view" id="view-shelf">
+        <header class="page-header compact-header"><div><h1>书架</h1><p>续读、书签和已完成的本地作品。</p></div><button class="icon-button" id="shelfRefresh" title="刷新书架" aria-label="刷新书架"><svg><use href="#i-refresh"/></svg></button></header>
+        <div class="shelf-toolbar" id="shelfFilters" role="group" aria-label="书架分类"><button class="is-active" data-shelf-filter="recent">最近阅读</button><button data-shelf-filter="favorite">收藏</button><button data-shelf-filter="bookmarks">书签</button><button data-shelf-filter="local">本地作品</button><span id="shelfCount"></span></div>
+        <div id="shelfList" class="shelf-list" aria-live="polite"></div>
+      </section>
+
       <section class="view" id="view-queue">
         <header class="page-header compact-header">
           <div>
-            <div class="eyebrow"><span class="live-dot"></span> 实时任务中心</div>
             <h1>下载任务</h1>
-            <p>队列、进度和错误都集中在这里，不再被日志淹没。</p>
+            <p>查看下载进度、调整队列和处理异常。</p>
           </div>
           <div class="header-actions">
             <button class="secondary-button" id="openRootButton"><svg><use href="#i-folder"/></svg>打开目录</button>
@@ -179,9 +198,8 @@
       <section class="view" id="view-history">
         <header class="page-header compact-header">
           <div>
-            <div class="eyebrow"><svg><use href="#i-clock"/></svg> 本机记录</div>
             <h1>下载记录</h1>
-            <p>快速找回最近处理过的作品和保存目录。</p>
+            <p>本机下载记录与保存位置。</p>
           </div>
           <button class="secondary-button" id="clearHistoryButton"><svg><use href="#i-trash"/></svg>清空记录</button>
         </header>
@@ -196,8 +214,8 @@
 
     <aside class="planner" id="planner" aria-label="下载清单">
       <div class="planner-head">
-        <div><span class="section-kicker">DOWNLOAD PLAN</span><h2>下载清单 <em id="selectedCount">0</em></h2></div>
-        <div class="planner-head-actions"><button class="text-button" id="clearSelectedButton">清空</button><button class="icon-button planner-close" id="plannerClose"><svg><use href="#i-x"/></svg></button></div>
+        <div><h2>下载清单 <em id="selectedCount">0</em></h2></div>
+        <div class="planner-head-actions"><button class="text-button" id="clearSelectedButton">清空</button><button class="icon-button planner-close" id="plannerClose" aria-label="关闭下载清单" title="关闭下载清单"><svg><use href="#i-x"/></svg></button></div>
       </div>
 
       <div class="selection-empty" id="selectionEmpty">
@@ -227,8 +245,8 @@
         <details class="advanced-settings" id="advancedSettings">
           <summary><span><svg><use href="#i-settings"/></svg>质量与并发</span><svg class="summary-chevron"><use href="#i-chevron"/></svg></summary>
           <div class="advanced-body">
-            <label class="select-row"><span>图片格式</span><select id="imageFormatInput"><option value=".png">PNG</option><option value=".jpg">JPG</option><option value=".webp">WebP</option><option value="原始格式">保留原始格式</option></select></label>
-            <label class="select-row pdf-only" id="pdfModeRow"><span>PDF 章节</span><select id="pdfModeInput"><option value="merged">合并为一本</option><option value="separate">章节分开</option></select></label>
+            <label class="select-row"><span>图片格式</span><select id="imageFormatInput"><option value=".png">PNG</option><option value=".jpg">JPG</option><option value="原始格式">保留原始格式</option></select></label>
+            <label class="select-row pdf-only" id="pdfModeRow"><span>PDF 章节</span><select id="pdfModeInput"><option value="merged">合并为一本</option><option value="chapters">章节分开</option></select></label>
             <label class="range-row"><span><b>图片并发</b><output id="imageThreadsValue">5</output></span><input id="imageThreadsInput" type="range" min="1" max="20" value="5"></label>
             <label class="range-row"><span><b>作品并发</b><output id="albumThreadsValue">1</output></span><input id="albumThreadsInput" type="range" min="1" max="8" value="1"></label>
           </div>
@@ -245,6 +263,44 @@
       </div>
     </aside>
   </div>
+
+  <section id="readerWorkspace" class="reader-workspace" aria-label="漫画阅读器" hidden>
+    <header class="reader-toolbar">
+      <button id="readerBack" class="reader-icon" title="返回工作区" aria-label="返回工作区"><svg><use href="#i-arrow-left"/></svg></button>
+      <div class="reader-title"><strong id="readerBookTitle">正在打开…</strong><span id="readerChapterTitle"></span></div>
+      <div class="reader-tools">
+        <button id="readerDirectoryButton" class="reader-icon" title="章节与书签 (C)" aria-label="章节与书签"><svg><use href="#i-list"/></svg></button>
+        <select id="readerMode" aria-label="阅读方式" title="阅读方式"><option value="vertical">竖向</option><option value="single">单页</option><option value="spread">双页</option></select>
+        <select id="readerFit" aria-label="页面适应方式" title="页面适应方式"><option value="comfortable">舒适宽度</option><option value="width">适应宽度</option><option value="height">适应高度</option><option value="original">原始大小</option></select>
+        <button id="readerBookmarkButton" class="reader-icon" title="添加书签 (B)" aria-label="添加书签"><svg><use href="#i-bookmark"/></svg></button>
+        <button id="readerThemeButton" class="reader-icon" title="切换明暗" aria-label="切换明暗"><svg><use href="#i-moon"/></svg></button>
+        <button id="readerOptionsButton" class="reader-icon" title="阅读设置" aria-label="阅读设置"><svg><use href="#i-settings"/></svg></button>
+        <button id="readerFocusButton" class="reader-icon" title="专注模式 (Tab)" aria-label="专注模式"><svg><use href="#i-focus"/></svg></button>
+        <button id="readerFullscreenButton" class="reader-icon" title="全屏 (F11)" aria-label="全屏"><svg><use href="#i-fullscreen"/></svg></button>
+      </div>
+    </header>
+    <div class="reader-body">
+      <aside id="readerDirectory" class="reader-directory" hidden><div class="reader-directory-head"><strong>章节与书签</strong><button id="readerDirectoryClose" class="reader-icon" aria-label="关闭目录"><svg><use href="#i-x"/></svg></button></div><div id="readerChapters"></div><h3>阅读书签</h3><div id="readerBookmarks"></div></aside>
+      <div id="readerViewport" class="reader-viewport" tabindex="0" aria-label="阅读正文"><div id="readerCanvas" class="reader-canvas"></div></div>
+    </div>
+    <footer class="reader-footer">
+      <button id="readerPrevChapter" title="上一章">上一章</button><button id="readerPrevPage" class="reader-icon" aria-label="上一页" title="上一页"><svg><use href="#i-chevron-left"/></svg></button>
+      <label class="reader-page-input"><input id="readerPageInput" type="number" min="1" value="1" aria-label="跳转到页码"><span id="readerPageTotal">/ —</span></label>
+      <input id="readerProgress" type="range" min="0" max="0" value="0" aria-label="阅读进度">
+      <button id="readerNextPage" class="reader-icon" aria-label="下一页" title="下一页"><svg><use href="#i-chevron-right"/></svg></button><button id="readerNextChapter" title="下一章">下一章</button>
+      <span id="readerSaveStatus" class="reader-save-status">准备就绪</span><button id="readerDownload" title="加入下载清单"><svg><use href="#i-download"/></svg><span>下载</span></button>
+    </footer>
+    <button id="readerReveal" class="reader-reveal" title="退出专注模式" hidden>显示工具栏</button>
+    <div id="readerOptions" class="reader-options" hidden>
+      <div class="reader-options-head"><strong>阅读设置</strong><button id="readerOptionsClose" class="reader-icon" aria-label="关闭阅读设置"><svg><use href="#i-x"/></svg></button></div>
+      <label>阅读方向<select id="readerDirection"><option value="ltr">从左向右</option><option value="rtl">从右向左</option></select></label>
+      <label>预读后续页<select id="readerPrefetch"><option value="0">不预读</option><option value="1">1 页</option><option value="3">3 页（默认）</option><option value="5">5 页</option></select></label>
+      <label>缓存上限<select id="readerCacheBudget"><option value="128">128 MB</option><option value="256">256 MB</option><option value="512">512 MB</option><option value="1024">1 GB</option><option value="2048">2 GB</option></select></label>
+      <label>页面缩放<input id="readerZoom" type="range" min="50" max="200" step="10" value="100"><output id="readerZoomValue">100%</output></label>
+      <div class="reader-cache-row"><span id="readerCacheStats">正在读取缓存…</span><button id="readerClearCache">清理缓存</button></div>
+      <p>← → 翻页 · ↑ ↓ 滚动 · C 目录 · B 书签<br>Tab 专注 · F11 全屏 · Esc 返回/退出全屏</p>
+    </div>
+  </section>
 
   <button class="floating-plan-button" id="floatingPlanButton"><svg><use href="#i-download"/></svg><span>下载清单</span><em id="floatingPlanCount">0</em></button>
 
@@ -276,6 +332,7 @@
   </section>
 
   <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script src="reader.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

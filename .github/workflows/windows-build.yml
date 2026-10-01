@@ -1,0 +1,42 @@
+name: Windows build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.rid }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [ win-x64, win-arm64 ]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publish GUI executable
+        shell: pwsh
+        run: ./scripts/publish.ps1 -RuntimeIdentifier ${{ matrix.rid }} -OutputDirectory artifacts/publish/${{ matrix.rid }}
+
+      - name: Run packaged-app self-check
+        shell: pwsh
+        run: ./scripts/selfcheck.ps1 -ExecutablePath ./artifacts/publish/${{ matrix.rid }}/DesktopShell.exe -ReportPath ./artifacts/selfcheck/${{ matrix.rid }}.json
+
+      - name: Upload publish output
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: JMDownload-${{ matrix.rid }}
+          path: artifacts/publish/${{ matrix.rid }}/DesktopShell.exe
+          if-no-files-found: error

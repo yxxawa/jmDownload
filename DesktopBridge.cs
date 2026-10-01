@@ -33,6 +33,8 @@ public sealed class DesktopBridge
             {
                 "selectDirectory" => SelectDirectory(request.Payload, _owner),
                 "openDirectory"   => OpenDirectory(request.Payload),
+                "setTheme"        => SetWindowTheme(request.Payload),
+                "setFullscreen"   => SetFullscreen(request.Payload),
                 _ => BridgeResult.Fail("unsupported bridge command: " + request.Type),
             };
 
@@ -43,6 +45,22 @@ public sealed class DesktopBridge
             if (request is not null)
                 await SendResponseAsync(request.Id, BridgeResult.Fail(ex.Message));
         }
+    }
+
+    private BridgeResult SetFullscreen(JsonElement payload)
+    {
+        if (_owner is not MainWindow window) return BridgeResult.Fail("unsupported window owner");
+        if (!payload.TryGetProperty("enabled", out var value) || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return BridgeResult.Fail("invalid fullscreen state");
+        return BridgeResult.Ok(new { fullscreen = window.SetFullscreen(value.GetBoolean()) });
+    }
+
+    private BridgeResult SetWindowTheme(JsonElement payload)
+    {
+        var theme = GetPayloadString(payload, "theme");
+        if (theme is not ("light" or "dark")) return BridgeResult.Fail("invalid window theme");
+        if (_owner is not MainWindow mainWindow) return BridgeResult.Fail("unsupported window owner");
+        var applied = mainWindow.ApplyWindowTheme(theme == "dark");
+        return BridgeResult.Ok(new { theme, nativeApplied = applied });
     }
 
     private static BridgeResult SelectDirectory(JsonElement payload, Window owner)

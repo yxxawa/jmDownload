@@ -1,5 +1,9 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using Microsoft.Win32;
 using DesktopShell.NativeBackend;
 using Microsoft.Web.WebView2.Core;
 
@@ -10,10 +14,84 @@ public partial class MainWindow : Window
     private NativeBackendServer? _nativeBackend;
     private WebViewBridge? _webViewBridge;
     private bool _isClosing;
+    private bool _windowIsDark;
+
+    private bool _fullscreen;
+    private WindowState _savedWindowState;
+    private WindowStyle _savedWindowStyle;
+    private ResizeMode _savedResizeMode;
+    private Rect _savedBounds;
+    public bool SetFullscreen(bool enabled)
+    {
+        if (enabled == _fullscreen) return _fullscreen;
+        if (enabled)
+        {
+            _savedWindowState = WindowState; _savedWindowStyle = WindowStyle; _savedResizeMode = ResizeMode;
+            _savedBounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+            WindowState = WindowState.Normal; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowState = WindowState.Normal; WindowStyle = _savedWindowStyle; ResizeMode = _savedResizeMode;
+            Left = _savedBounds.Left; Top = _savedBounds.Top; Width = _savedBounds.Width; Height = _savedBounds.Height;
+            WindowState = _savedWindowState;
+            ApplyWindowTheme(_windowIsDark);
+        }
+        _fullscreen = enabled;
+        if (Browser.CoreWebView2 is not null)
+            _ = Browser.CoreWebView2.ExecuteScriptAsync("window.dispatchEvent(new CustomEvent('jm-native-fullscreen',{detail:{fullscreen:" + (enabled ? "true" : "false") + "}}));");
+        return _fullscreen;
+    }
+
+    private const int DwmUseImmersiveDarkMode = 20;
+    private const int DwmCaptionColor = 35;
+    private const int DwmTextColor = 36;
+
+    [DllImport("dwmapi.dll", ExactSpelling = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     public MainWindow()
     {
         InitializeComponent();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var systemIsDark = Registry.GetValue(
+            @"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            "AppsUseLightTheme", 1) is int light && light == 0;
+        ApplyWindowTheme(systemIsDark);
+    }
+
+    internal bool ApplyWindowTheme(bool dark)
+    {
+        _windowIsDark = dark;
+        var highContrast = SystemParameters.HighContrast;
+        var background = highContrast ? SystemColors.WindowColor
+            : dark ? Color.FromRgb(17, 23, 19) : Color.FromRgb(245, 246, 244);
+        Background = new SolidColorBrush(background);
+        StartupPanel.Background = Background;
+        Resources["StartupPrimaryText"] = highContrast ? SystemColors.WindowTextBrush
+            : new SolidColorBrush(dark ? Color.FromRgb(237, 243, 238) : Color.FromRgb(32, 39, 33));
+        Resources["StartupSecondaryText"] = highContrast ? SystemColors.WindowTextBrush
+            : new SolidColorBrush(dark ? Color.FromRgb(178, 192, 182) : Color.FromRgb(80, 92, 83));
+        Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, background.R, background.G, background.B);
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return false;
+        var immersiveDark = dark && !highContrast ? 1 : 0;
+        var result = DwmSetWindowAttribute(handle, DwmUseImmersiveDarkMode, ref immersiveDark, sizeof(int));
+        if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            // COLORREF is 0x00BBGGRR; -1 restores Windows defaults in high-contrast mode.
+            var captionColor = highContrast ? -1 : dark ? 0x00191E17 : 0x00F4F6F5;
+            var textColor = highContrast ? -1 : dark ? 0x00EEF3ED : 0x00212720;
+            DwmSetWindowAttribute(handle, DwmCaptionColor, ref captionColor, sizeof(int));
+            DwmSetWindowAttribute(handle, DwmTextColor, ref textColor, sizeof(int));
+        }
+        return result >= 0;
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -54,7 +132,7 @@ public partial class MainWindow : Window
             "JMComicDesktop", "WebView2");
         var env = await CoreWebView2Environment.CreateAsync(userDataFolder: folder);
         await Browser.EnsureCoreWebView2Async(env);
-        Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, 243, 245, 242);
+        ApplyWindowTheme(_windowIsDark);
         _webViewBridge = new WebViewBridge();
         await _webViewBridge.ConfigureAsync(Browser.CoreWebView2, token, this);
 

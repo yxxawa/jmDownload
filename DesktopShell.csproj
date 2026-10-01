@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <SmokeTest Condition="'$(SmokeTest)' == ''">false</SmokeTest>
     <OutputType Condition="'$(SmokeTest)' == 'true'">Exe</OutputType>
     <OutputType Condition="'$(SmokeTest)' != 'true'">WinExe</OutputType>
     <StartupObject Condition="'$(SmokeTest)' == 'true'">DesktopShell.NativeBackendSmoke</StartupObject>

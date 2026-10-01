@@ -1,13 +1,23 @@
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace DesktopShell.NativeBackend;
 
-public sealed class NativeDownloadManager
+public sealed class NativeDownloadManager : IDisposable
 {
     private readonly object _lock = new();
     private readonly JmClient _client;
+    private readonly ImageRepository _images;
+    private readonly ReaderStore? _readerStore;
+    private readonly bool _ownsImages;
+    private readonly Dictionary<string, CancellationTokenSource> _jobTokens = [];
+    private readonly HashSet<string> _dirty = [];
+    private readonly Timer _progressTimer;
+    private bool _running;
+    private string _runId = "";
+    private long _sequence;
     private CancellationTokenSource? _downloadCts;
     private Task? _downloadTask;
     private readonly HashSet<string> _runningItemIds = [];
@@ -17,10 +27,11 @@ public sealed class NativeDownloadManager
     private List<DownloadTaskState> _tasks = [];
     private List<DownloadJob> _pendingJobs = [];
 
-    public NativeDownloadManager(JmClient client, Action<DownloadEventDto> eventSink)
+    public NativeDownloadManager(JmClient client, Action<DownloadEventDto> eventSink, ImageRepository? images = null, ReaderStore? readerStore = null)
     {
-        _client = client;
-        EventSink = eventSink;
+        _client = client; EventSink = eventSink; _readerStore = readerStore; _ownsImages = images is null;
+        _images = images ?? new ImageRepository(client, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "JMComicDesktop"));
+        _progressTimer = new Timer(_ => FlushProgress(), null, 150, 150);
     }
 
     private Action<DownloadEventDto> EventSink { get; }
@@ -31,7 +42,7 @@ public sealed class NativeDownloadManager
         {
             lock (_lock)
             {
-                return _downloadTask is { IsCompleted: false };
+                return _running;
             }
         }
     }
@@ -55,7 +66,7 @@ public sealed class NativeDownloadManager
 
         lock (_lock)
         {
-            if (_downloadTask is { IsCompleted: false })
+            if (_running)
             {
                 throw new InvalidOperationException("download task is already running");
             }
@@ -63,6 +74,10 @@ public sealed class NativeDownloadManager
             _downloadCts?.Dispose();
             _downloadCts = new CancellationTokenSource();
             _runningItemIds.Clear();
+            _jobTokens.Clear();
+            _dirty.Clear();
+            _running = true;
+            _runId = Guid.NewGuid().ToString("N");
             _lastFailedIds = [];
             _lastSuccessIds = [];
             _lastStopped = false;
@@ -74,73 +89,33 @@ public sealed class NativeDownloadManager
             }).ToList();
             _pendingJobs = [.. jobs];
 
-            _downloadTask = Task.Run(() => RunAsync(Math.Max(1, albumThreads), _downloadCts.Token));
+            var token = _downloadCts.Token;
+            var runId = _runId;
+            _downloadTask = Task.Run(() => RunAsync(Math.Clamp(albumThreads, 1, 8), token, runId));
         }
     }
 
     public bool CancelTask(string itemId, string? baseDir = null, string? outputFormat = null)
     {
-        DownloadJob? cancelledJob = null;
-
         lock (_lock)
         {
-            if (_runningItemIds.Contains(itemId))
+            if (_jobTokens.TryGetValue(itemId, out var token))
             {
-                _downloadCts?.Cancel();
+                token.Cancel();
+                SetTaskStatusUnlocked(itemId, "stopping", "正在取消当前作品", null);
             }
             else
             {
-                var pending = _pendingJobs.FirstOrDefault(j => j.ItemId == itemId);
+                var pending = _pendingJobs.Find(j => j.ItemId == itemId);
                 if (pending is null) return false;
-                cancelledJob = pending;
                 _pendingJobs.Remove(pending);
                 SetTaskStatusUnlocked(itemId, "cancelled", "已取消", null);
-                _tasks.RemoveAll(t => t.ItemId == itemId);
             }
+            // Do not delete a directory while a worker writes, or destroy already completed formats.
+            // Atomic writes leave reusable completed pages; only transient .tmp files are cleaned up.
+            Emit("item_cancel_requested", "WARNING", $"取消作品: {itemId}", itemId, new() { ["snapshot"] = SnapshotUnlocked() });
+            return true;
         }
-
-        // Delete partial download files for the cancelled task
-        var dirToDelete = baseDir ?? cancelledJob?.Settings.BaseDir;
-        if (!string.IsNullOrWhiteSpace(dirToDelete) && Directory.Exists(dirToDelete))
-        {
-            var fmt = outputFormat ?? cancelledJob?.Settings.OutputFormat ?? "images";
-            TryDeleteDownloadArtifacts(dirToDelete, fmt);
-        }
-
-        return true;
-    }
-
-    // Deletes the download directory/files for a cancelled task.
-    // Only deletes if no other format artifacts exist alongside the current one.
-    private static void TryDeleteDownloadArtifacts(string baseDir, string outputFormat)
-    {
-        // Whitelist outputFormat to prevent glob injection
-        if (outputFormat is not ("images" or "zip" or "pdf")) return;
-        try
-        {
-            if (outputFormat is "zip" or "pdf")
-            {
-                // Delete partial zip/pdf files (they won't be complete)
-                var ext = "." + outputFormat;
-                foreach (var f in Directory.GetFiles(baseDir, "*" + ext))
-                {
-                    try { File.Delete(f); } catch { }
-                }
-                // If directory is now empty, remove it
-                if (!Directory.EnumerateFileSystemEntries(baseDir).Any())
-                    Directory.Delete(baseDir, recursive: false);
-            }
-            else
-            {
-                // images format: baseDir is the ID subfolder — delete it entirely
-                // but only if it contains no zip/pdf artifacts (those belong to other formats)
-                var hasOtherFormats = Directory.EnumerateFiles(baseDir, "*.zip").Any()
-                                   || Directory.EnumerateFiles(baseDir, "*.pdf").Any();
-                if (!hasOtherFormats)
-                    Directory.Delete(baseDir, recursive: true);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException) { /* best-effort */ }
     }
 
     public bool ReorderTask(string itemId, int direction)
@@ -179,7 +154,7 @@ public sealed class NativeDownloadManager
         DownloadSnapshot snapshot;
         lock (_lock)
         {
-            if (_downloadTask is not { IsCompleted: false } || _downloadCts is null)
+            if (!_running || _downloadCts is null)
             {
                 return false;
             }
@@ -198,162 +173,88 @@ public sealed class NativeDownloadManager
         return true;
     }
 
-    private async Task RunAsync(int albumThreads, CancellationToken cancellationToken)
+    private async Task RunAsync(int albumThreads, CancellationToken cancellationToken, string runId)
     {
         var failedIds = new List<string>();
         var successIds = new List<string>();
         var stopped = false;
-        var stoppedEmitted = 0; // Interlocked flag: only first worker emits "stopped"
-
-        int totalCount;
-        lock (_lock)
-        {
-            totalCount = _pendingJobs.Count;
-        }
-
         try
         {
-            Emit("started", "INFO", $"开始下载任务，共 {totalCount} 个ID", data: new()
-            {
-                ["snapshot"] = Snapshot(),
-            });
-
-            using var semaphore = new SemaphoreSlim(albumThreads, albumThreads);
-
-            DownloadJob? DequeueNext()
-            {
-                lock (_lock)
-                {
-                    if (_pendingJobs.Count == 0) return null;
-                    var job = _pendingJobs[0];
-                    _pendingJobs.RemoveAt(0);
-                    return job;
-                }
-            }
-
-            var workerTasks = new List<Task>();
-            // Seed initial workers up to albumThreads.
-            for (var i = 0; i < albumThreads; i++)
-            {
-                workerTasks.Add(WorkerAsync());
-            }
-            await Task.WhenAll(workerTasks).ConfigureAwait(false);
-
+            Emit("started", "INFO", $"开始下载任务，共 {_tasks.Count} 个ID", data: new() { ["snapshot"] = Snapshot() });
+            await Task.WhenAll(Enumerable.Range(0, albumThreads).Select(_ => WorkerAsync())).ConfigureAwait(false);
             async Task WorkerAsync()
             {
                 while (true)
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        lock (_lock)
-                        {
-                            stopped = true;
-                            foreach (var remaining in _pendingJobs)
-                                SetTaskStatusUnlocked(remaining.ItemId, "cancelled", "已取消", remaining.Settings.BaseDir);
-                            _pendingJobs.Clear();
-                        }
-                        // Only the first worker to detect cancellation emits the event
-                        if (Interlocked.CompareExchange(ref stoppedEmitted, 1, 0) == 0)
-                            Emit("stopped", "WARNING", "下载任务已停止", data: new() { ["snapshot"] = Snapshot() });
-                        return;
-                    }
-
-                    var job = DequeueNext();
-                    if (job is null) return;
-
+                    DownloadJob job;
+                    CancellationTokenSource jobCts;
                     lock (_lock)
                     {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            stopped = true;
+                            foreach (var pending in _pendingJobs) SetTaskStatusUnlocked(pending.ItemId, "cancelled", "已取消", null);
+                            _pendingJobs.Clear();
+                            return;
+                        }
+                        if (_pendingJobs.Count == 0) return;
+                        job = _pendingJobs[0]; _pendingJobs.RemoveAt(0);
+                        jobCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        _jobTokens[job.ItemId] = jobCts;
                         _runningItemIds.Add(job.ItemId);
                         SetTaskStatusUnlocked(job.ItemId, "running", "下载中", job.Settings.BaseDir);
                     }
-
                     try
                     {
-                        Emit("item_start", "INFO", $"开始下载: {job.ItemId}", job.ItemId, new()
-                        {
-                            ["base_dir"] = job.Settings.BaseDir,
-                            ["snapshot"] = Snapshot(),
-                        });
-
-                        var result = await DownloadOneAsync(job, cancellationToken).ConfigureAwait(false);
-                        cancellationToken.ThrowIfCancellationRequested();
-
+                        Emit("item_start", "INFO", $"开始下载: {job.ItemId}", job.ItemId, new() { ["base_dir"] = job.Settings.BaseDir, ["snapshot"] = Snapshot() });
+                        var result = await DownloadOneAsync(job, jobCts.Token).ConfigureAwait(false);
+                        jobCts.Token.ThrowIfCancellationRequested();
                         lock (_lock)
                         {
-                            successIds.Add(job.ItemId);
-                            _runningItemIds.Remove(job.ItemId);
+                            successIds.Add(job.ItemId); _runningItemIds.Remove(job.ItemId);
                             SetTaskStatusUnlocked(job.ItemId, "success", result.Message, result.BaseDir);
-                        }
-
-                        Emit("item_success", "SUCCESS", result.Message, job.ItemId, new()
-                        {
-                            ["output_path"] = result.OutputPath,
-                            ["output_format"] = result.OutputFormat,
-                            ["snapshot"] = Snapshot(),
-                        });
-
-                        lock (_lock)
-                        {
-                            _tasks.RemoveAll(t => t.ItemId == job.ItemId && t.Status == "success");
+                            _dirty.Remove(job.ItemId);
+                            Emit("item_success", "SUCCESS", result.Message, job.ItemId, new() { ["output_path"] = result.OutputPath, ["output_format"] = result.OutputFormat, ["snapshot"] = SnapshotUnlocked() });
                         }
                     }
-                    catch (OperationCanceledException)
+                    catch (OperationCanceledException) when (jobCts.IsCancellationRequested)
                     {
                         lock (_lock)
                         {
-                            stopped = true;
-                            _runningItemIds.Remove(job.ItemId);
+                            stopped |= cancellationToken.IsCancellationRequested;
+                            _runningItemIds.Remove(job.ItemId); _dirty.Remove(job.ItemId);
                             SetTaskStatusUnlocked(job.ItemId, "cancelled", "已中断", job.Settings.BaseDir);
-                            foreach (var remaining in _pendingJobs)
-                                SetTaskStatusUnlocked(remaining.ItemId, "cancelled", "已取消", remaining.Settings.BaseDir);
-                            _pendingJobs.Clear();
-                            _tasks.RemoveAll(t => t.Status == "cancelled");
+                            Emit("item_cancelled", "WARNING", $"下载 {job.ItemId} 已中断", job.ItemId, new() { ["snapshot"] = SnapshotUnlocked() });
                         }
-                        Emit("item_cancelled", "WARNING", $"下载 {job.ItemId} 已中断", job.ItemId, new()
-                        {
-                            ["snapshot"] = Snapshot(),
-                        });
-                        return;
+                        // A single-item cancellation continues with the next queued item.
                     }
                     catch (Exception ex)
                     {
                         lock (_lock)
                         {
-                            failedIds.Add(job.ItemId);
-                            _runningItemIds.Remove(job.ItemId);
+                            failedIds.Add(job.ItemId); _runningItemIds.Remove(job.ItemId); _dirty.Remove(job.ItemId);
                             SetTaskStatusUnlocked(job.ItemId, "failed", ex.Message, job.Settings.BaseDir);
+                            Emit("item_failed", "ERROR", $"下载 {job.ItemId} 失败: {ex.Message}", job.ItemId, new() { ["snapshot"] = SnapshotUnlocked() });
                         }
-                        Emit("item_failed", "ERROR", $"下载 {job.ItemId} 失败: {ex.Message}", job.ItemId, new()
-                        {
-                            ["snapshot"] = Snapshot(),
-                        });
                     }
+                    finally { lock (_lock) _jobTokens.Remove(job.ItemId); jobCts.Dispose(); }
                 }
             }
-
-            if (!stopped && cancellationToken.IsCancellationRequested)
-            {
-                stopped = true;
-            }
-
-            var finishLevel = stopped ? "WARNING" : failedIds.Count > 0 ? "WARNING" : "SUCCESS";
-            var finishMessage = stopped ? "下载任务已停止" : failedIds.Count > 0 ? $"下载任务结束，失败 {failedIds.Count} 个ID" : "所有ID下载完成";
-            Emit("finished", finishLevel, finishMessage, data: new()
-            {
-                ["failed_ids"] = failedIds,
-                ["success_ids"] = successIds,
-                ["stopped"] = stopped,
-                ["snapshot"] = Snapshot(),
-            });
         }
         finally
         {
             lock (_lock)
             {
-                _lastFailedIds = failedIds;
-                _lastSuccessIds = successIds;
-                _lastStopped = stopped;
-                _runningItemIds.Clear();
+                // Commit business state BEFORE the final event; Task.IsCompleted is not a business state.
+                if (_runId == runId)
+                {
+                    stopped |= cancellationToken.IsCancellationRequested;
+                    _lastFailedIds = failedIds; _lastSuccessIds = successIds; _lastStopped = stopped;
+                    _runningItemIds.Clear(); _dirty.Clear(); _running = false;
+                    var message = stopped ? "下载任务已停止" : failedIds.Count > 0 ? $"下载任务结束，失败 {failedIds.Count} 个ID" : "所有ID下载完成";
+                    Emit("finished", stopped || failedIds.Count > 0 ? "WARNING" : "SUCCESS", message, data: new()
+                    { ["failed_ids"] = failedIds, ["success_ids"] = successIds, ["stopped"] = stopped, ["snapshot"] = SnapshotUnlocked() });
+                }
             }
         }
     }
@@ -386,6 +287,7 @@ public sealed class NativeDownloadManager
         }
 
         var existingImages = ArtifactTools.FindImageSource(settings.BaseDir, title);
+        if (existingImages is not null && !File.Exists(Path.Combine(existingImages, ".jm-complete.json"))) existingImages = null;
         string imageSource;
 
         if (existingImages is not null)
@@ -444,6 +346,7 @@ public sealed class NativeDownloadManager
         {
             if (settings.OutputFormat == "images")
             {
+                RegisterCompletedLocal(album, imageSource);
                 return new DownloadResult($"{itemId} 下载完成（路径：{imageSource}）", settings.BaseDir, imageSource, "images");
             }
 
@@ -489,173 +392,109 @@ public sealed class NativeDownloadManager
     }
 
     private async Task<string> DownloadImagesAsync(
-        string itemId,
-        AlbumDetailDto album,
-        string outputRoot,
-        string title,
-        IReadOnlyDictionary<string, PhotoDetailDto> prefetchedPhotos,
-        DownloadSettings settings,
-        CancellationToken cancellationToken)
+        string itemId, AlbumDetailDto album, string outputRoot, string title,
+        IReadOnlyDictionary<string, PhotoDetailDto> prefetchedPhotos, DownloadSettings settings, CancellationToken cancellationToken)
     {
         var albumDir = Path.Combine(outputRoot, title);
         Directory.CreateDirectory(albumDir);
-
-        SetProgress(itemId, 0, 0, album.Title, "解析章节图片列表", "album_start");
-
-        var photos = new List<(ChapterDto Chapter, PhotoDetailDto Photo)>();
-        foreach (var chapter in album.Chapters.OrderBy(chapter => chapter.Sort))
+        var channel = Channel.CreateBounded<(PhotoDetailDto Photo, int Index, string Dir, string Title)>(new BoundedChannelOptions(Math.Clamp(settings.ImageThreads * 2, 2, 40)) { FullMode = BoundedChannelFullMode.Wait });
+        using var pipeline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var token = pipeline.Token;
+        var localPages = new Dictionary<string, List<string>>();
+        int done = 0, total = 0;
+        SetProgress(itemId, 0, 0, album.Title, "边解析章节边下载", "album_start");
+        var workers = Enumerable.Range(0, Math.Clamp(settings.ImageThreads, 1, 20)).Select(_ => Consume()).ToArray();
+        Exception? producerError = null;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!prefetchedPhotos.TryGetValue(chapter.Id, out var photo))
+            await Parallel.ForEachAsync(album.Chapters.OrderBy(c => c.Sort), new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(settings.PhotoThreads, 1, 5), CancellationToken = token }, async (chapter, ct) =>
             {
-                photo = await _client.GetPhotoDetailAsync(chapter.Id, album, fetchScramble: true, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            if (photo.Images.Count > 0)
-            {
-                photos.Add((chapter, photo));
-            }
+                if (!prefetchedPhotos.TryGetValue(chapter.Id, out var photo)) photo = await _client.GetPhotoDetailAsync(chapter.Id, album, true, ct).ConfigureAwait(false);
+                if (photo.Images.Count == 0) throw new IOException("章节图片列表为空: " + chapter.Title);
+                Interlocked.Add(ref total, photo.Images.Count);
+                var dir = album.Chapters.Count > 1 ? Path.Combine(albumDir, ArtifactTools.SafeFilename($"{chapter.Sort:D3} {chapter.Title}", chapter.Id, settings.FilenameLang)) : albumDir;
+                Directory.CreateDirectory(dir);
+                lock (localPages) localPages[chapter.Id] = Enumerable.Range(0, photo.Images.Count).Select(i => Path.Combine(dir, (i + 1).ToString("D5") + ImageRepository.OutputSuffix(photo, i, settings.ImageSuffix))).ToList();
+                SetProgress(itemId, Volatile.Read(ref done), Volatile.Read(ref total), chapter.Title, $"已解析章节，开始取图: {chapter.Title}", "photo_start");
+                for (int i = 0; i < photo.Images.Count; i++) await channel.Writer.WriteAsync((photo, i, dir, chapter.Title), ct).ConfigureAwait(false);
+            }).ConfigureAwait(false);
         }
-
-        var totalImages = photos.Sum(item => item.Photo.Images.Count);
-        SetProgress(itemId, 0, totalImages, album.Title, $"解析完成，准备下载 {totalImages} 张图片", "album_start");
-
-        var done = 0;
-        using var photoSemaphore = new SemaphoreSlim(Math.Max(1, settings.PhotoThreads), Math.Max(1, settings.PhotoThreads));
-        using var imageSemaphore = new SemaphoreSlim(Math.Max(1, settings.ImageThreads), Math.Max(1, settings.ImageThreads));
-
-        var chapterTasks = photos.Select(item => DownloadChapterAsync(item.Chapter, item.Photo)).ToList();
-        await Task.WhenAll(chapterTasks).ConfigureAwait(false);
-
-        SetProgress(itemId, done, totalImages, album.Title, $"图片下载完成 {done}/{totalImages}", "album_done");
+        catch (Exception ex) { producerError = ex; pipeline.Cancel(); }
+        finally { channel.Writer.TryComplete(producerError); }
+        if (producerError is null) SetProgress(itemId, Volatile.Read(ref done), Volatile.Read(ref total), album.Title, "全部章节已解析，继续下载剩余图片", "metadata_ready");
+        try { await Task.WhenAll(workers).ConfigureAwait(false); }
+        catch { pipeline.Cancel(); if (producerError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(producerError).Throw(); throw; }
+        if (producerError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(producerError).Throw();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (done == 0 || done != total) throw new IOException("图片下载不完整");
+        var marker = Path.Combine(albumDir, ".jm-complete.json");
+        var tmp = marker + ".tmp";
+        await File.WriteAllTextAsync(tmp, JsonSerializer.Serialize(localPages, NativeJson.JsonOptions), cancellationToken).ConfigureAwait(false);
+        File.Move(tmp, marker, true);
+        SetProgress(itemId, done, total, album.Title, $"图片下载完成 {done}/{total}", "album_done");
         return albumDir;
 
-        async Task DownloadChapterAsync(ChapterDto chapter, PhotoDetailDto photo)
+        async Task Consume()
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await photoSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var chapterDir = album.Chapters.Count > 1
-                    ? Path.Combine(albumDir, ArtifactTools.SafeFilename($"{chapter.Sort:D3} {chapter.Title}", chapter.Id, settings.FilenameLang))
-                    : albumDir;
-                Directory.CreateDirectory(chapterDir);
-
-                SetProgress(itemId, done, totalImages, chapter.Title, $"章节下载中: {chapter.Title}", "photo_start");
-
-                var tasks = new List<Task>();
-                for (var i = 0; i < photo.Images.Count; i++)
+                await foreach (var entry in channel.Reader.ReadAllAsync(token).ConfigureAwait(false))
                 {
-                    tasks.Add(DownloadImageSlotAsync(photo, i, chapterDir, chapter.Title));
+                    await DownloadImageWithFallbackAsync(entry.Photo, entry.Index, entry.Dir, settings, token).ConfigureAwait(false);
+                    var progress = Interlocked.Increment(ref done);
+                    SetProgress(itemId, progress, Volatile.Read(ref total), entry.Title, $"图片下载进度 {progress}/{Volatile.Read(ref total)}", "image_done");
                 }
-
-                await Task.WhenAll(tasks).ConfigureAwait(false);
-                SetProgress(itemId, done, totalImages, chapter.Title, $"章节完成: {chapter.Title}", "photo_done");
             }
-            finally
-            {
-                photoSemaphore.Release();
-            }
-        }
-
-        async Task DownloadImageSlotAsync(PhotoDetailDto photo, int index, string chapterDir, string chapterTitle)
-        {
-            await imageSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                await DownloadImageWithFallbackAsync(photo, index, chapterDir, settings, cancellationToken)
-                    .ConfigureAwait(false);
-                var current = Interlocked.Increment(ref done);
-                SetProgress(itemId, current, totalImages, chapterTitle, $"图片下载进度 {current}/{totalImages}", "image_done");
-            }
-            finally
-            {
-                imageSemaphore.Release();
-            }
+            catch { pipeline.Cancel(); throw; }
         }
     }
-
-    private async Task DownloadImageWithFallbackAsync(
-        PhotoDetailDto photo,
-        int imageIndex,
-        string chapterDir,
-        DownloadSettings settings,
-        CancellationToken cancellationToken)
+    private async Task DownloadImageWithFallbackAsync(PhotoDetailDto photo, int index, string dir, DownloadSettings settings, CancellationToken token)
     {
-        var imageName = photo.Images[imageIndex];
-        var sourceSuffix = Path.GetExtension(imageName);
-        var targetSuffix = settings.ImageSuffix ?? sourceSuffix;
-        if (string.IsNullOrWhiteSpace(targetSuffix))
-        {
-            targetSuffix = sourceSuffix;
-        }
-
-        var savePath = Path.Combine(chapterDir, (imageIndex + 1).ToString("D5") + targetSuffix);
-        if (File.Exists(savePath))
-        {
-            return;
-        }
-
-        Exception? lastError = null;
-        foreach (var url in _client.BuildImageUrls(photo, imageName))
-        {
-            try
-            {
-                await _client.DownloadImageAsync(
-                    url,
-                    savePath,
-                    photo.ScrambleId,
-                    decode: true,
-                    targetSuffix,
-                    cancellationToken).ConfigureAwait(false);
-                return;
-            }
-            catch (Exception ex) when (ex is IOException or InvalidOperationException or HttpRequestException)
-            {
-                lastError = ex;
-                if (File.Exists(savePath))
-                {
-                    try
-                    {
-                        File.Delete(savePath);
-                    }
-                    catch
-                    {
-                        // Best effort cleanup.
-                    }
-                }
-            }
-        }
-
-        throw new InvalidOperationException("图片下载失败: " + imageName, lastError);
+        var destination = Path.Combine(dir, (index + 1).ToString("D5") + ImageRepository.OutputSuffix(photo, index, settings.ImageSuffix));
+        if (File.Exists(destination) && JmImageDecoder.IsUsableImage(destination)) return;
+        var cached = await _images.GetFileAsync(photo, index, settings.ImageSuffix, 2, token).ConfigureAwait(false);
+        await _images.CopyToAsync(cached, destination, token).ConfigureAwait(false);
     }
-
+    private void RegisterCompletedLocal(AlbumDetailDto album, string dir)
+    {
+        if (_readerStore is null) return;
+        try
+        {
+            var file = Path.Combine(dir, ".jm-complete.json");
+            var pages = JsonSerializer.Deserialize<Dictionary<string, List<string>>>(File.ReadAllText(file), NativeJson.JsonOptions);
+            var prefix = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (pages is null || !album.Chapters.All(c => pages.TryGetValue(c.Id, out var paths) && paths.Count > 0 && paths.All(path => Path.GetFullPath(path).StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && File.Exists(path)))) return;
+            _readerStore.RegisterLocal(album, pages);
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { }
+    }
     private void SetProgress(string itemId, int progress, int total, string detail, string message, string stage)
     {
-        DownloadSnapshot snapshot;
         lock (_lock)
         {
-            var task = _tasks.FirstOrDefault(task => task.ItemId == itemId);
-            if (task is not null)
-            {
-                task.Progress = Math.Max(0, progress);
-                task.Total = Math.Max(0, total);
-                task.Detail = detail;
-                task.Message = message;
-            }
-
-            snapshot = SnapshotUnlocked();
+            var task = _tasks.Find(t => t.ItemId == itemId);
+            if (task is null || task.Status is not ("running" or "stopping")) return;
+            task.Progress = Math.Max(task.Progress, Math.Max(0, progress));
+            task.Total = Math.Max(task.Total, Math.Max(0, total)); task.Detail = detail; task.Message = message;
+            if (stage == "album_start") task.TotalKnown = false;
+            if (stage is "metadata_ready" or "album_done") task.TotalKnown = true;
+            _dirty.Add(itemId);
+            if (stage != "image_done") FlushProgress();
         }
-
-        Emit("item_progress", "INFO", message, itemId, new()
-        {
-            ["stage"] = stage,
-            ["progress"] = progress,
-            ["total"] = total,
-            ["detail"] = detail,
-            ["snapshot"] = snapshot,
-        });
     }
+    private void FlushProgress()
+    {
+        lock (_lock)
+        {
+            if (_dirty.Count == 0) return;
+            var changed = _tasks.Where(t => _dirty.Contains(t.ItemId)).Select(CloneTask).ToList();
+            _dirty.Clear();
+            Emit("tasks_delta", "INFO", "下载进度已更新", data: new() { ["changed_tasks"] = changed, ["running"] = _running, ["stopping"] = _running && _downloadCts?.IsCancellationRequested == true });
+        }
+    }
+    private static DownloadTaskState CloneTask(DownloadTaskState t) => new() { ItemId = t.ItemId, Status = t.Status, BaseDir = t.BaseDir, Message = t.Message, Progress = t.Progress, Total = t.Total, TotalKnown = t.TotalKnown, Detail = t.Detail };
+    public async Task StopAsync() { RequestStop(); var task = _downloadTask; if (task is not null) try { await task.ConfigureAwait(false); } catch { } }
+    public void Dispose() { _progressTimer.Dispose(); _downloadCts?.Cancel(); if (_ownsImages) _images.Dispose(); }
 
     private void SetTaskStatusUnlocked(string itemId, string status, string message, string? baseDir)
     {
@@ -666,6 +505,7 @@ public sealed class NativeDownloadManager
         }
 
         task.Status = status;
+        if (status == "running") task.TotalKnown = false;
         task.Message = message;
         if (baseDir is not null)
         {
@@ -675,8 +515,9 @@ public sealed class NativeDownloadManager
 
     private DownloadSnapshot SnapshotUnlocked() => new()
     {
-        Running = _downloadTask is { IsCompleted: false },
-        Stopping = _downloadCts?.IsCancellationRequested == true,
+        RunId = _runId,
+        Running = _running,
+        Stopping = _running && _downloadCts?.IsCancellationRequested == true,
         CurrentItemId = _runningItemIds.FirstOrDefault(),
         LastFailedIds = [.. _lastFailedIds],
         LastSuccessIds = [.. _lastSuccessIds],
@@ -691,6 +532,7 @@ public sealed class NativeDownloadManager
                 Progress = task.Progress,
                 Total = task.Total,
                 Detail = task.Detail,
+                TotalKnown = task.TotalKnown,
             })
             .ToList(),
     };
@@ -702,14 +544,13 @@ public sealed class NativeDownloadManager
         string? itemId = null,
         Dictionary<string, object?>? data = null)
     {
-        EventSink(new DownloadEventDto
+        lock (_lock)
         {
-            Type = type,
-            Level = level,
-            Message = message,
-            ItemId = itemId,
-            Data = data ?? [],
-        });
+            data ??= [];
+            if (data.ContainsKey("snapshot")) data["snapshot"] = SnapshotUnlocked();
+            data["run_id"] = _runId; data["sequence"] = ++_sequence;
+            EventSink(new DownloadEventDto { Type = type, Level = level, Message = message, ItemId = itemId, Data = data });
+        }
     }
 
     private sealed record DownloadResult(string Message, string BaseDir, string OutputPath, string OutputFormat);

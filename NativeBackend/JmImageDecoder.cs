@@ -43,6 +43,30 @@ public static class JmImageDecoder
         SaveBitmap(source, savePath);
     }
 
+    public static bool HasImageSignature(byte[] data) => data.Length >= 12 &&
+        ((data[0] == 0xff && data[1] == 0xd8) || (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4e && data[3] == 0x47) ||
+         System.Text.Encoding.ASCII.GetString(data, 0, 3) == "GIF" || System.Text.Encoding.ASCII.GetString(data, 0, 2) == "BM" ||
+         (System.Text.Encoding.ASCII.GetString(data, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(data, 8, 4) == "WEBP"));
+    public static bool IsUsableBytes(byte[] data, string suffix)
+    {
+        if (!HasImageSignature(data)) return false;
+        if (suffix == ".webp") return true; // WPF has no built-in WebP encoder/decoder; browser can display raw WebP.
+        try { var image = LoadBitmap(data); return image.PixelWidth > 0 && image.PixelHeight > 0 && (long)image.PixelWidth * image.PixelHeight <= 64_000_000; }
+        catch (Exception e) when (e is IOException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException) { return false; }
+    }
+
+    public static bool IsUsableImage(string path)
+    {
+        try
+        {
+            if (new FileInfo(path).Length == 0) return false;
+            if (Path.GetExtension(path).Equals(".webp", StringComparison.OrdinalIgnoreCase))
+            { var data = File.ReadAllBytes(path); return data.Length > 12 && System.Text.Encoding.ASCII.GetString(data, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(data, 8, 4) == "WEBP"; }
+            return LoadBitmap(File.ReadAllBytes(path)).PixelWidth > 0;
+        }
+        catch (Exception e) when (e is IOException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException or System.IO.FileFormatException) { return false; }
+    }
+
     public static PdfImageData LoadPdfImage(string imagePath)
     {
         var source = LoadBitmap(File.ReadAllBytes(imagePath));
