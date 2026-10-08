@@ -14,6 +14,7 @@ internal static class NativeBackendSmoke
 {
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--filename-selfcheck") return RunFilenameSelfCheck();
         if (args.Length > 0 && args[0] == "--webp-selfcheck") return RunWebPSelfCheck();
         if (args.Length > 1 && args[0] == "--storage-selfcheck") return await RunStorageSelfCheck(args[1], args.Length > 2 && args[2] == "--expect-masked");
         if (args.Length > 0 && args[0] == "--collection-selfcheck") return await RunCollectionSelfCheck();
@@ -268,6 +269,88 @@ internal static class NativeBackendSmoke
         var persisted = new ReaderStore(root);
         Require(persisted.Get("101") is { Favorite: true, Local: false } && persisted.Bookmarks("101").Count == 1 && File.Exists(pagePath), "collection changes did not persist safely");
         Console.WriteLine("collection selfcheck ok: favorites, history, bookmarks, local shelf, authentication, task protection and persistence");
+        return 0;
+    }
+
+    private static int RunFilenameSelfCheck()
+    {
+        static string AndroidName(string name, string fallback = "download") =>
+            ArtifactTools.SafeFilename(name, fallback, "traditional", android: true);
+        static void Valid(string name)
+        {
+            Require(!string.IsNullOrWhiteSpace(name), "filename became empty");
+            Require(Encoding.UTF8.GetByteCount(name) <= ArtifactTools.MaxSafeFilenameUtf8Bytes, "filename exceeded Android byte budget");
+            Require(!name.Any(ch => ch is '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*' || char.IsControl(ch)), "unsafe filename character survived");
+            Require(!name.EndsWith(' ') && !name.EndsWith('.'), "invalid trailing filename character");
+            _ = new UTF8Encoding(false, true).GetBytes(name);
+        }
+        foreach (var name in new[] { new string('A', 120), new string('界', 40), string.Concat(Enumerable.Repeat("📚", 30)) })
+        {
+            Require(AndroidName(name) == name, "a name at the byte boundary was modified");
+            Valid(AndroidName(name));
+        }
+        foreach (var name in new[] { new string('A', 121), new string('界', 41), string.Concat(Enumerable.Repeat("📚", 31)), new string('界', 1000), new string('A', 1000) + "📚", "abc<>:/\\|?*\n\t. " })
+        {
+            Valid(AndroidName(name));
+            Require(AndroidName(name) == AndroidName(name), "filename abbreviation was unstable");
+        }
+        Valid(AndroidName(" . ", new string('界', 1000) + "/?"));
+        Require(AndroidName("CON", "NUL") == "download", "reserved fallback name remained invalid");
+        Require(AndroidName("普通标题 01") == "普通标题 01", "short title changed");
+        Require(ArtifactTools.SafeFilename(new string('界', 160), "download", "traditional", android: false).Length == 160, "desktop title compatibility changed");
+        var first = AndroidName(new string('界', 400) + " A");
+        var second = AndroidName(new string('界', 400) + " B");
+        Require(first != second, "different long titles mapped to the same filename");
+        var root = Path.Combine(Path.GetTempPath(), "jm-filenames-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var album = Path.Combine(root, first);
+            var chapterA = AndroidName("001 " + string.Concat(Enumerable.Repeat("超长章节📚", 100)));
+            var chapterB = AndroidName("002 " + string.Concat(Enumerable.Repeat("超长章节📚", 100)));
+            MakeTestImage(Path.Combine(album, chapterA, "00001.jpg"), Colors.Red);
+            MakeTestImage(Path.Combine(album, chapterB, "00001.jpg"), Colors.Blue);
+            var marker = Path.Combine(album, ".jm-complete.json");
+            File.WriteAllText(marker + ".tmp", "{}");
+            File.Move(marker + ".tmp", marker);
+            var duplicates = Path.Combine(root, "duplicates");
+            var firstDir = ArtifactTools.UniqueDirectoryPath(duplicates, first);
+            Directory.CreateDirectory(firstDir);
+            var secondDir = ArtifactTools.UniqueDirectoryPath(duplicates, first);
+            Directory.CreateDirectory(secondDir);
+            Require(firstDir != secondDir, "duplicate directory reused the same path");
+            var exports = Path.Combine(root, "exports");
+            var zip = ArtifactTools.UniqueFilePath(exports, first, ".zip");
+            ArtifactTools.MakeZip(album, zip);
+            Require(CountZipImages(zip) == 2, "long-title ZIP export lost images");
+            var merged = ArtifactTools.UniqueFilePath(exports, first, ".pdf");
+            ArtifactTools.MakePdf(album, merged);
+            Require(CountPdfImages(merged) == 2, "long-title merged PDF export lost images");
+            var duplicatePdf = ArtifactTools.UniqueFilePath(exports, first, ".pdf");
+            Require(duplicatePdf != merged, "duplicate PDF replaced an existing export");
+            ArtifactTools.MakePdf(album, duplicatePdf);
+            foreach (var directory in ArtifactTools.GroupChapterDirectories(album))
+            {
+                var name = AndroidName(first + " - " + Path.GetFileName(directory));
+                var pdf = ArtifactTools.UniqueFilePath(exports, name, ".pdf");
+                ArtifactTools.MakePdf(directory, pdf);
+                Require(CountPdfImages(pdf) == 1, "long-title chapter PDF failed");
+            }
+            foreach (var entry in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories))
+            {
+                Require(Encoding.UTF8.GetByteCount(Path.GetFileName(entry)) <= 255, "file component exceeded Android NAME_MAX");
+                Require(!entry.EndsWith(".tmp", StringComparison.Ordinal), "temporary export file was left behind");
+            }
+            Console.WriteLine("filename selfcheck ok: UTF-8 boundaries, emoji, fallback sanitization, deterministic distinct names, desktop compatibility, nested image directories, duplicate names, ZIP and PDF exports");
+        }
+        finally
+        {
+            var absolute = Path.GetFullPath(root);
+            var temp = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!absolute.StartsWith(temp, StringComparison.OrdinalIgnoreCase) || !Path.GetFileName(absolute).StartsWith("jm-filenames-", StringComparison.Ordinal))
+                throw new InvalidOperationException("Unsafe filename-test cleanup path");
+            Directory.Delete(absolute, recursive: true);
+        }
         return 0;
     }
 

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -33,14 +34,22 @@ public static class ArtifactTools
         return len > 0 ? new string(dest, 0, len) : text;
     }
 
-    public static string SafeFilename(string name, string fallback = "download", string filenameLang = "traditional")
+    // Leave room for extensions, duplicate-name suffixes and atomic-write temporary files.
+    public const int MaxSafeFilenameUtf8Bytes = 120;
+
+    public static string SafeFilename(string name, string fallback = "download", string filenameLang = "traditional") =>
+        SafeFilename(name, fallback, filenameLang, OperatingSystem.IsAndroid());
+
+    internal static string SafeFilename(string name, string fallback, string filenameLang, bool android)
     {
         if (filenameLang == "simplified")
             name = ConvertChineseScript(name ?? string.Empty, toSimplified: true);
 
-        name = Regex.Replace(name ?? string.Empty, """[<>:"/\\|?*\x00-\x1f]+""", "_");
-        name = Regex.Replace(name, @"\s+", " ").Trim(' ', '.');
-        if (string.IsNullOrWhiteSpace(name)) return fallback;
+        static string Clean(string? value)
+        {
+            var cleaned = Regex.Replace(value ?? string.Empty, """[<>:"/\\|?*\x00-\x1f]+""", "_");
+            return Regex.Replace(cleaned, @"\s+", " ").Trim(' ', '.');
+        }
 
         var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -48,8 +57,26 @@ public static class ArtifactTools
             "COM1","COM2","COM3","COM4","COM5","COM6","COM7","COM8","COM9",
             "LPT1","LPT2","LPT3","LPT4","LPT5","LPT6","LPT7","LPT8","LPT9",
         };
-        if (reserved.Contains(name)) return fallback;
-        return name.Length > 160 ? name[..160] : name;
+        name = Clean(name);
+        if (string.IsNullOrWhiteSpace(name) || reserved.Contains(name)) name = Clean(fallback);
+        if (string.IsNullOrWhiteSpace(name) || reserved.Contains(name)) name = "download";
+
+        // Retain desktop naming; Android limits names by UTF-8 bytes, not UTF-16 chars.
+        if (!android) return name.Length > 160 ? name[..160] : name;
+        if (Encoding.UTF8.GetByteCount(name) <= MaxSafeFilenameUtf8Bytes) return name;
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(name))).ToLowerInvariant()[..12];
+        var suffix = "~" + hash;
+        var budget = MaxSafeFilenameUtf8Bytes - suffix.Length;
+        var prefix = new StringBuilder();
+        var bytes = 0;
+        foreach (var rune in name.EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > budget) break;
+            prefix.Append(rune.ToString());
+            bytes += rune.Utf8SequenceLength;
+        }
+        return prefix.ToString().TrimEnd(' ', '.') + suffix;
     }
 
     public static string UniqueFilePath(string directory, string name, string suffix)

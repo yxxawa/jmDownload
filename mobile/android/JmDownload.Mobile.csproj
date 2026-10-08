@@ -10,8 +10,8 @@
     <AssemblyName>JmDownload</AssemblyName>
 
     <ApplicationId>com.jmd.mobile</ApplicationId>
-    <ApplicationVersion>2</ApplicationVersion>
-    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>3</ApplicationVersion>
+    <ApplicationDisplayVersion>1.1.1</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
 
     <AndroidUseAapt2>true</AndroidUseAapt2>

@@ -34,6 +34,11 @@ jobs:
         shell: pwsh
         run: ./scripts/selfcheck.ps1 -ExecutablePath ./artifacts/publish/${{ matrix.rid }}/DesktopShell.exe -ReportPath ./artifacts/selfcheck/${{ matrix.rid }}.json
 
+      - name: Check long-filename regression
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: dotnet run --project ./DesktopShell.csproj -c Release -p:SmokeTest=true -- --filename-selfcheck
+
       - name: Upload publish output
         uses: actions/upload-artifact@v7.0.1
         with:
