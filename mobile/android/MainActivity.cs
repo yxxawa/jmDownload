@@ -400,7 +400,9 @@ public class MainActivity : Activity
                     var view = new Intent(Intent.ActionView);
                     view.SetDataAndType(document, Android.Provider.DocumentsContract.Document.MimeTypeDir);
                     view.AddFlags(ActivityFlags.GrantReadUriPermission | ActivityFlags.GrantWriteUriPermission);
-                    StartActivity(view);
+                    // Always offer an app choice, including when a default file manager is set.
+                    using var chooser = Intent.CreateChooser(view, "选择打开文件夹的应用");
+                    StartActivity(chooser);
                     return;
                 }
             }
