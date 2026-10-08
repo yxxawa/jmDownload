@@ -66,7 +66,6 @@ public static class JmImageDecoder
     public static bool IsUsableBytes(byte[] data, string suffix)
     {
         if (!HasImageSignature(data)) return false;
-        if (suffix.Equals(".webp", StringComparison.OrdinalIgnoreCase)) return true;
         var size = Probe(data);
         return size.Width > 0 && size.Height > 0 && (long)size.Width * size.Height <= 64_000_000;
     }
@@ -76,12 +75,6 @@ public static class JmImageDecoder
         try
         {
             if (new FileInfo(path).Length == 0) return false;
-            if (Path.GetExtension(path).Equals(".webp", StringComparison.OrdinalIgnoreCase))
-            {
-                var data = File.ReadAllBytes(path);
-                return data.Length > 12 && System.Text.Encoding.ASCII.GetString(data, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(data, 8, 4) == "WEBP";
-            }
-
             var size = Probe(File.ReadAllBytes(path));
             return size.Width > 0 && size.Height > 0;
         }

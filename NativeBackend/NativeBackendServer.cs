@@ -182,8 +182,8 @@ public sealed class NativeBackendServer : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            var status = ex is ArgumentException or System.Text.Json.JsonException ? 400 : ex is KeyNotFoundException ? 404 : ex is OperationCanceledException ? 409 : 500;
-            try { await WriteJsonAsync(context.Response, status, new { detail = ex.Message }).ConfigureAwait(false); }
+            var status = ex is StorageAccessException or UnauthorizedAccessException ? 403 : ex is ArgumentException or System.Text.Json.JsonException ? 400 : ex is KeyNotFoundException ? 404 : ex is OperationCanceledException ? 409 : 500;
+            try { await WriteJsonAsync(context.Response, status, new { detail = StorageAccess.Describe(ex) }).ConfigureAwait(false); }
             catch (Exception e) when (e is HttpListenerException or IOException or ObjectDisposedException) { }
         }
     }
@@ -352,6 +352,14 @@ public sealed class NativeBackendServer : IAsyncDisposable
             return;
         }
 
+        if (request.HttpMethod == "POST" && path == "/api/tasks/remove")
+        {
+            var body = await ReadJsonAsync<ReaderCollectionRequest>(request).ConfigureAwait(false) ?? new();
+            if (body.Ids is null) throw new ArgumentException("请选择已结束任务");
+            await WriteJsonAsync(response, 200, _downloadManager.RemoveTasks(body.Ids)).ConfigureAwait(false);
+            return;
+        }
+
         if (request.HttpMethod == "GET" && path == "/api/tasks")
         {
             await WriteJsonAsync(response, 200, _downloadManager.Snapshot()).ConfigureAwait(false);
@@ -393,8 +401,19 @@ public sealed class NativeBackendServer : IAsyncDisposable
         else if (method == "PUT" && resource == "progress" && id != "") result = _reader.Progress(id, await ReadJsonAsync<ReaderProgress>(request).ConfigureAwait(false) ?? new());
         else if (method == "GET" && resource == "shelf") result = _reader.Shelf();
         else if (method == "DELETE" && resource == "shelf" && id != "") { _reader.Store.Remove(id); result = new { removed = true }; }
+        else if (method == "POST" && resource == "manage")
+        { result = new { removed = _reader.Store.Manage(await ReadJsonAsync<ReaderCollectionRequest>(request).ConfigureAwait(false) ?? new()) }; }
+        else if (method == "GET" && resource == "favorites" && id == "") result = new { ids = _reader.Store.FavoriteIds() };
+        else if (method == "POST" && resource == "favorites" && id == "")
+        { result = await _reader.FavoritesAsync(await ReadJsonAsync<ReaderCollectionRequest>(request).ConfigureAwait(false) ?? new(), token).ConfigureAwait(false); }
         else if (method == "PUT" && resource == "favorites" && id != "")
-        { var body = await ReadJsonAsync<JsonObject>(request).ConfigureAwait(false); result = _reader.Store.Favorite(id, body?["favorite"]?.GetValue<bool>() ?? false); }
+        {
+            id = JmClient.ParseJmId(id);
+            var body = await ReadJsonAsync<JsonObject>(request).ConfigureAwait(false);
+            bool favorite = body?["favorite"]?.GetValue<bool>() ?? false;
+            if (favorite && _reader.Store.Get(id) is null) await _reader.BookAsync(id, token).ConfigureAwait(false);
+            result = _reader.Store.Favorite(id, favorite);
+        }
         else if (method == "GET" && resource == "bookmarks") result = new { bookmarks = _reader.Store.Bookmarks(request.QueryString["album_id"]) };
         else if (method == "POST" && resource == "bookmarks") result = new { bookmarked = _reader.Store.ToggleBookmark(await ReadJsonAsync<ReaderBookmark>(request).ConfigureAwait(false) ?? new()) };
         else if (method == "GET" && resource == "settings") result = _reader.Store.Settings;

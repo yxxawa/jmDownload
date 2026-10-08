@@ -62,7 +62,7 @@ public sealed class ImageRepository : IDisposable
     }
     public ImageRepository(JmClient client, string appDataRoot)
     {
-        _client = client; _gate = client.ImageGate; _root = Path.Combine(appDataRoot, "Cache", "reader"); Directory.CreateDirectory(_root);
+        _client = client; _gate = client.ImageGate; _root = StorageAccess.ImageCacheDirectory(appDataRoot);
         _sweep = new Timer(_ => Sweep(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
     }
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
@@ -101,8 +101,8 @@ public sealed class ImageRepository : IDisposable
         }
     }
     private static async Task Observe(Task task) { try { await task.ConfigureAwait(false); } catch { } }
-    private static bool Valid(string file) { try { return new FileInfo(file) is { Exists: true, Length: > 0 }; } catch (IOException) { return false; } }
-    private static void Touch(string file) { try { File.SetLastAccessTimeUtc(file, DateTime.UtcNow); } catch (IOException) { } }
+    private static bool Valid(string file) { try { return new FileInfo(file) is { Exists: true, Length: > 0 }; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; } }
+    private static void Touch(string file) { try { File.SetLastAccessTimeUtc(file, DateTime.UtcNow); } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { } }
     public static string OutputSuffix(PhotoDetailDto photo, int index, string? suffix)
     {
         var source = Path.GetExtension(photo.Images[index].Split('?')[0]).ToLowerInvariant();
@@ -118,7 +118,7 @@ public sealed class ImageRepository : IDisposable
         var ext = OutputSuffix(photo, index, suffix);
         var sourceExt = Path.GetExtension(name.Split('?')[0]).ToLowerInvariant();
         var segments = JmImageDecoder.GetSegmentCount(photo.ScrambleId, photo.Id, Path.GetFileNameWithoutExtension(name.Split('?')[0]));
-        var key = Hash($"decode-v2|{photo.Id}|{name}|{photo.ScrambleId}|{ext}");
+        var key = Hash($"decode-v3|{photo.Id}|{name}|{photo.ScrambleId}|{ext}");
         var file = Path.Combine(_root, key + ext);
         token.ThrowIfCancellationRequested();
         if (Valid(file)) { Interlocked.Increment(ref _hits); Touch(file); return file; }
@@ -160,8 +160,8 @@ public sealed class ImageRepository : IDisposable
                 return file;
             }
             catch (Exception e) when (e is not OperationCanceledException)
-            { try { lock (_files) File.Delete(raw); } catch (IOException) { } throw new IOException("\u56fe\u7247\u8fd8\u539f\u5931\u8d25: " + name, e); }
-            finally { _decode.Release(); try { File.Delete(tmp); } catch (IOException) { } }
+            { try { lock (_files) File.Delete(raw); } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { } throw new IOException("图片处理失败：" + name + "。具体原因：" + e.Message, e); }
+            finally { _decode.Release(); try { File.Delete(tmp); } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { } }
         }).ConfigureAwait(false);
     }
     private IDisposable Pin(string key)
@@ -182,7 +182,7 @@ public sealed class ImageRepository : IDisposable
     {
         var tmp = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try { await File.WriteAllBytesAsync(tmp, bytes, token).ConfigureAwait(false); token.ThrowIfCancellationRequested(); lock (_files) File.Move(tmp, file, true); }
-        finally { try { File.Delete(tmp); } catch (IOException) { } }
+        finally { try { File.Delete(tmp); } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { } }
     }
     public FileStream OpenRead(string file)
     { lock (_files) return new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan); }
@@ -196,7 +196,8 @@ public sealed class ImageRepository : IDisposable
                 await input.CopyToAsync(output, token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested(); File.Move(tmp, destination, true);
         }
-        finally { try { File.Delete(tmp); } catch (IOException) { } }
+        catch (UnauthorizedAccessException e) { throw new StorageAccessException("下载目录无法写入：" + Path.GetDirectoryName(destination) + "。请检查目录权限，或在安卓上授予文件访问权限。", e); }
+        finally { try { File.Delete(tmp); } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { } }
     }
     public object Stats()
     {
@@ -207,7 +208,7 @@ public sealed class ImageRepository : IDisposable
         }
     }
     public int Clear() => Prune(true);
-    private void Sweep() { try { Prune(false); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
+    private void Sweep() { try { Prune(false); } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { } }
     private int Prune(bool clear)
     {
         // Keep lock order consistent with Shared; never hold _files while waiting on _sync.
@@ -219,7 +220,7 @@ public sealed class ImageRepository : IDisposable
             {
                 if (!clear && size <= Interlocked.Read(ref _budget)) break;
                 if (_jobs.Keys.Concat(_pins.Keys).Any(k => file.Name.StartsWith(k, StringComparison.Ordinal))) continue;
-                try { var length = file.Length; file.Delete(); size -= length; removed++; } catch (IOException) { }
+                try { var length = file.Length; file.Delete(); size -= length; removed++; } catch (Exception cleanupError) when (cleanupError is IOException or UnauthorizedAccessException) { }
             }
             return removed;
         }

@@ -38,6 +38,34 @@ public sealed class ReaderService : IDisposable
         try { return Store.Remember(await _client.GetAlbumDetailAsync(id, token).ConfigureAwait(false)); }
         catch (Exception e) when (saved is not null && e is not OperationCanceledException) { saved.Local = CompleteLocal(saved); return saved; }
     }
+    public async Task<object> FavoritesAsync(ReaderCollectionRequest request, CancellationToken token)
+    {
+        if (request.Ids is null || request.Ids.Count == 0 || request.Ids.Count > 500)
+            throw new ArgumentException("请选择 1 至 500 个作品");
+        var ids = request.Ids.Select(JmClient.ParseJmId).Distinct().ToList();
+        var succeeded = new ConcurrentBag<string>();
+        var changed = new ConcurrentBag<string>();
+        var failed = new ConcurrentBag<object>();
+        await Parallel.ForEachAsync(ids, new ParallelOptions { MaxDegreeOfParallelism = 3, CancellationToken = token }, async (id, ct) =>
+        {
+            try
+            {
+                if (Store.Get(id) is null && request.Favorite) await BookAsync(id, ct).ConfigureAwait(false);
+                if (Store.Get(id) is not null)
+                {
+                    Store.Favorite(id, request.Favorite, out var didChange);
+                    if (didChange) changed.Add(id);
+                }
+                succeeded.Add(id);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                failed.Add(new { id, detail = e.Message });
+            }
+        }).ConfigureAwait(false);
+        return new { succeeded = succeeded.ToArray(), changed = changed.ToArray(), failed = failed.ToArray() };
+    }
+
     private static bool CompleteLocal(ReaderBook book) => book.Local && book.Chapters.Count > 0 &&
         book.Chapters.All(c => book.LocalPages.TryGetValue(c.Id, out var pages) && pages.Count > 0 && pages.All(ValidFile));
     private static bool ValidFile(string path) { try { return new FileInfo(path) is { Exists: true, Length: > 0 }; } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; } }
@@ -45,6 +73,7 @@ public sealed class ReaderService : IDisposable
     public async Task<object> OpenAsync(string albumId, CancellationToken token)
     {
         var book = await BookAsync(albumId, token).ConfigureAwait(false);
+        Store.Visit(book.Id);
         if (_sessions.Count >= 16) throw new InvalidOperationException("阅读会话过多，请先关闭旧会话");
         var id = Guid.NewGuid().ToString("N");
         _sessions[id] = new Session(book.Id, _stop.Token);

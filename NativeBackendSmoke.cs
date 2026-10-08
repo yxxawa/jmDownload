@@ -14,6 +14,9 @@ internal static class NativeBackendSmoke
 {
     public static async Task<int> Main(string[] args)
     {
+        if (args.Length > 0 && args[0] == "--webp-selfcheck") return RunWebPSelfCheck();
+        if (args.Length > 1 && args[0] == "--storage-selfcheck") return await RunStorageSelfCheck(args[1], args.Length > 2 && args[2] == "--expect-masked");
+        if (args.Length > 0 && args[0] == "--collection-selfcheck") return await RunCollectionSelfCheck();
         await using var server = new NativeBackendServer();
         await server.StartAsync(new Progress<string>(Console.WriteLine));
 
@@ -100,6 +103,171 @@ internal static class NativeBackendSmoke
             Console.WriteLine(text.Length > 500 ? text[..500] : text);
         }
 
+        return 0;
+    }
+
+    private static int RunWebPSelfCheck()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jm-webp-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        using var bitmap = new SkiaSharp.SKBitmap(new SkiaSharp.SKImageInfo(32, 15));
+        for (int y = 0; y < 15; y++) for (int x = 0; x < 32; x++)
+            bitmap.SetPixel(x, y, y < 5 ? SkiaSharp.SKColors.Red : y < 10 ? SkiaSharp.SKColors.Lime : SkiaSharp.SKColors.Blue);
+        using var image = SkiaSharp.SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Webp, 100);
+        var bytes = encoded.ToArray();
+        File.WriteAllBytes(Path.Combine(root, "fixture.webp"), bytes);
+        Directory.CreateDirectory(".ui-test");
+        File.WriteAllText(Path.Combine(".ui-test", "webp-fixture.txt"), Convert.ToBase64String(bytes));
+        // Confirm whether the pre-fix system-codec path works on this host.
+        try
+        {
+            using var input = new MemoryStream(bytes);
+            var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            Require(decoder.Frames[0].PixelWidth == 32, "system decoder returned incorrect WebP dimensions");
+            Console.WriteLine("System WebP codec is present; bundled decoder is tested independently.");
+        }
+        catch (Exception e) when (e is IOException or NotSupportedException or System.Runtime.InteropServices.COMException)
+        { Console.WriteLine("Baseline WebP failure reproduced: " + e.GetType().Name + ": " + e.Message); }
+        Require(JmImageDecoder.IsUsableBytes(bytes, ".webp"), "valid WebP rejected");
+        Require(!JmImageDecoder.IsUsableBytes(bytes[..14], ".webp"), "truncated WebP accepted");
+        foreach (var suffix in new[] { ".png", ".jpg", ".webp" })
+        {
+            var output = Path.Combine(root, "converted" + suffix);
+            JmImageDecoder.DecodeAndSave(bytes, 0, output);
+            Require(JmImageDecoder.IsUsableImage(output), "WebP conversion output unusable: " + suffix);
+            if (suffix == ".webp") Require(System.Text.Encoding.ASCII.GetString(File.ReadAllBytes(output), 0, 4) == "RIFF", "PNG bytes were written with a WebP extension");
+        }
+        var restored = Path.Combine(root, "restored.png");
+        JmImageDecoder.DecodeAndSave(bytes, 3, restored);
+        using (var input = File.OpenRead(restored))
+        {
+            var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            var frame = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgra32, null, 0);
+            var pixels = new byte[32 * 15 * 4]; frame.CopyPixels(pixels, 32 * 4, 0);
+            var top = (2 * 32 + 16) * 4; var bottom = (12 * 32 + 16) * 4;
+            Require(pixels[top] > 180 && pixels[top + 2] < 80 && pixels[bottom + 2] > 180 && pixels[bottom] < 80, "WebP strip order was not restored correctly");
+        }
+        var pdfImage = JmImageDecoder.LoadPdfImage(Path.Combine(root, "converted.webp"));
+        Require(pdfImage.Width == 32 && pdfImage.Height == 15 && pdfImage.JpegBytes.Length > 20, "WebP PDF conversion failed");
+        Console.WriteLine("WebP selfcheck ok: independent decoding, corrupt-input rejection, strip restoration, PNG/JPEG/WebP encoding and PDF image conversion");
+        return 0;
+    }
+
+    private static async Task<int> RunStorageSelfCheck(string root, bool expectMasked)
+    {
+        var blocked = Path.Combine(root, "blocked");
+        bool denied = false;
+        try { StorageAccess.RequireWritableDirectory(blocked, "测试下载目录"); }
+        catch (StorageAccessException) { denied = true; }
+        Require(denied, "fixture directory is writable; real ACL denial was not applied");
+        using (var cache = new JmContentCache(blocked))
+        {
+            var data = await cache.JsonAsync("fixture", TimeSpan.FromHours(1), _ => Task.FromResult(new System.Text.Json.Nodes.JsonObject { ["fixture"] = true }), CancellationToken.None);
+            Require(data["fixture"]!.GetValue<bool>(), "metadata cache failure broke a successful response");
+        }
+        using var client = new JmClient(root);
+        using var images = new ImageRepository(client, blocked);
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var imageRoot = (string)typeof(ImageRepository).GetField("_root", flags)!.GetValue(images)!;
+        Require(!imageRoot.StartsWith(blocked, StringComparison.OrdinalIgnoreCase), "unwritable image cache did not use a private fallback");
+        var photo = new PhotoDetailDto { Id = "9011", Title = "Fixture chapter", ScrambleId = "0", Images = Enumerable.Repeat("00001.png", 100).ToList() };
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes("decode-v3|9011|00001.png|0|.png"))).ToLowerInvariant();
+        File.WriteAllBytes(Path.Combine(imageRoot, key + ".png"), [1, 2, 3]);
+        using var manager = new NativeDownloadManager(client, _ => { }, images);
+        var album = new AlbumDetailDto { Id = "901", Title = "Fixture", Chapters = [new ChapterDto { Id = "9011", Title = "Fixture chapter", Sort = 1 }] };
+        var method = typeof(NativeDownloadManager).GetMethod("DownloadImagesAsync", flags)!;
+        var task = (Task<string>)method.Invoke(manager, ["901", album, blocked, "Fixture", new Dictionary<string, PhotoDetailDto> { ["9011"] = photo }, new DownloadSettings { BaseDir = blocked, ImageThreads = 1, PhotoThreads = 1 }, CancellationToken.None])!;
+        bool correctError = false;
+        try { await task; }
+        catch (OperationCanceledException e) when (expectMasked) { correctError = true; Console.WriteLine("baseline reproduced: " + e.Message); }
+        catch (StorageAccessException e) when (!expectMasked) { correctError = true; Console.WriteLine("fixed pipeline: " + e.Message); }
+        Require(correctError, expectMasked ? "baseline did not reproduce the masked cancellation" : "permission error was masked by pipeline cancellation");
+        Console.WriteLine("storage selfcheck ok: genuine Windows ACL denial, metadata response preserved, image-cache fallback and original write failure");
+        return 0;
+    }
+
+    private static async Task<int> RunCollectionSelfCheck()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "jm-collections-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var pagePath = Path.Combine(root, "page.png");
+        File.WriteAllBytes(pagePath, [1, 2, 3]);
+        var store = new ReaderStore(root);
+        foreach (var id in new[] { "101", "102", "103" })
+            store.Remember(new AlbumDetailDto { Id = id, Title = "Fixture " + id, Chapters = [new ChapterDto { Id = id + "1", Title = "Chapter", Sort = 1 }] });
+        var album = new AlbumDetailDto { Id = "101", Title = "Fixture 101", Chapters = [new ChapterDto { Id = "1011", Title = "Chapter", Sort = 1 }] };
+        store.RegisterLocal(album, new() { ["1011"] = [pagePath] });
+        store.Progress("101", new ReaderProgress { ChapterId = "1011", Page = 3, Revision = 1 });
+        var first = new ReaderBookmark { AlbumId = "101", ChapterId = "1011", Page = 0 };
+        var second = new ReaderBookmark { AlbumId = "101", ChapterId = "1011", Page = 1 };
+        store.ToggleBookmark(first); store.ToggleBookmark(second);
+        await using var server = new NativeBackendServer(root);
+        await server.StartAsync();
+        using var http = new HttpClient { BaseAddress = server.BaseUri, Timeout = TimeSpan.FromSeconds(10) };
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
+        async Task<JsonElement> Send(string path, object body, string method = "POST")
+        {
+            using var request = new HttpRequestMessage(new HttpMethod(method), path) { Content = new StringContent(JsonSerializer.Serialize(body, NativeJson.ApiOptions), Encoding.UTF8, "application/json") };
+            using var response = await http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            return JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        }
+        async Task<JsonElement> Shelf()
+        {
+            using var response = await http.GetAsync("api/reader/shelf"); response.EnsureSuccessStatusCode();
+            return JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        }
+        async Task Invalid(string path, object body)
+        {
+            using var response = await http.PostAsync(path, new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"));
+            Require((int)response.StatusCode == 400, "invalid collection operation was accepted");
+        }
+        await Send("api/reader/favorites/101", new { favorite = true }, "PUT");
+        var favorites = await Send("api/reader/favorites", new { ids = new[] { "101", "102", "101" }, favorite = true });
+        Require(favorites.GetProperty("succeeded").GetArrayLength() == 2 && favorites.GetProperty("failed").GetArrayLength() == 0, "batch favorites did not deduplicate");
+        Require(favorites.GetProperty("changed").EnumerateArray().Select(item => item.GetString()).SequenceEqual(new[] { "102" }), "batch operation included pre-existing favorites in its undo list");
+        var repeated = await Send("api/reader/favorites", new { ids = new[] { "101", "102" }, favorite = true });
+        Require(repeated.GetProperty("changed").GetArrayLength() == 0, "repeated favorite was not idempotent");
+        await Send("api/reader/favorites", new { ids = favorites.GetProperty("changed").EnumerateArray().Select(item => item.GetString()).ToArray(), favorite = false });
+        using var favoriteStatus = JsonDocument.Parse(await http.GetStringAsync("api/reader/favorites"));
+        Require(favoriteStatus.RootElement.GetProperty("ids").EnumerateArray().Select(item => item.GetString()).SequenceEqual(new[] { "101" }), "undo removed a pre-existing favorite");
+        await Send("api/reader/favorites", new { ids = new[] { "101", "102" }, favorite = true });
+        await Invalid("api/reader/favorites", new { ids = new[] { "101", "invalid" }, favorite = false });
+        await Invalid("api/reader/favorites", new { ids = Enumerable.Repeat("101", 501).ToArray() });
+        await Send("api/reader/manage", new { action = "history", ids = new[] { "101" } });
+        var shelf = await Shelf();
+        var book = shelf.GetProperty("books").EnumerateArray().Single(b => b.GetProperty("id").GetString() == "101");
+        Require(book.GetProperty("hidden_from_recent").GetBoolean() && book.GetProperty("favorite").GetBoolean() && book.GetProperty("local").GetBoolean(), "history deletion removed a favorite or local book");
+        Require(book.GetProperty("progress").GetProperty("page").GetInt32() == 3 && shelf.GetProperty("bookmarks").GetArrayLength() == 2, "history deletion removed progress or bookmarks");
+        await Send("api/reader/manage", new { action = "bookmarks", bookmarks = new[] { first } });
+        Require((await Shelf()).GetProperty("bookmarks").GetArrayLength() == 1, "bookmark deletion removed other bookmarks");
+        await Send("api/reader/manage", new { action = "local", ids = new[] { "101" } });
+        Require(File.Exists(pagePath), "local shelf deletion removed a downloaded file");
+        await Send("api/reader/manage", new { action = "unfavorite", ids = new[] { "102" } });
+        var single = await Send("api/reader/favorites/102", new { favorite = true }, "PUT");
+        Require(single.GetProperty("favorite").GetBoolean(), "single favorite endpoint failed");
+        await Send("api/reader/progress/101", new ReaderProgress { ChapterId = "1011", Page = 4, Revision = 2 }, "PUT");
+        Require(!new ReaderStore(root).Get("101")!.HiddenFromRecent, "reading again did not restore recent history");
+        await Invalid("api/reader/manage", new { action = "unknown", ids = new[] { "101" } });
+        using var anonymous = new HttpClient { BaseAddress = server.BaseUri };
+        using var denied = await anonymous.PostAsync("api/reader/manage", new StringContent("{}", Encoding.UTF8, "application/json"));
+        Require((int)denied.StatusCode == 401, "collection mutation bypassed authentication");
+        // Seed task states without starting downloads or contacting upstream services.
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var manager = (NativeDownloadManager)typeof(NativeBackendServer).GetField("_downloadManager", flags)!.GetValue(server)!;
+        typeof(NativeDownloadManager).GetField("_tasks", flags)!.SetValue(manager, new List<DownloadTaskState> { new() { ItemId = "101", Status = "success" }, new() { ItemId = "102", Status = "queued" }, new() { ItemId = "103", Status = "failed" }, new() { ItemId = "p104", Status = "cancelled" } });
+        await Invalid("api/tasks/remove", new { ids = new[] { "101", "102" } });
+        Require(manager.Snapshot().Tasks.Count == 4, "rejected batch partially removed tasks");
+        await Send("api/tasks/remove", new { ids = new[] { "103" } });
+        Require(manager.Snapshot().Tasks.Count == 3 && manager.Snapshot().Tasks.All(task => task.ItemId != "103"), "failed task was not removed");
+        await Send("api/tasks/remove", new { ids = new[] { "p104" } });
+        Require(manager.Snapshot().Tasks.Count == 2 && manager.Snapshot().Tasks.All(task => task.ItemId != "p104"), "chapter task ID was normalized incorrectly");
+        var tasks = await Send("api/tasks/remove", new { ids = new[] { "101" } });
+        Require(tasks.GetProperty("tasks").GetArrayLength() == 1 && manager.Snapshot().Tasks[0].ItemId == "102", "completed task removal changed an active task");
+        var persisted = new ReaderStore(root);
+        Require(persisted.Get("101") is { Favorite: true, Local: false } && persisted.Bookmarks("101").Count == 1 && File.Exists(pagePath), "collection changes did not persist safely");
+        Console.WriteLine("collection selfcheck ok: favorites, history, bookmarks, local shelf, authentication, task protection and persistence");
         return 0;
     }
 

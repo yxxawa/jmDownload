@@ -95,6 +95,25 @@ public sealed class NativeDownloadManager : IDisposable
         }
     }
 
+    public DownloadSnapshot RemoveTasks(IReadOnlyList<string> requestedIds)
+    {
+        if (requestedIds.Count == 0 || requestedIds.Count > 500)
+            throw new ArgumentException("请选择 1 至 500 个已结束任务");
+        var ids = requestedIds.Select(id => (id ?? "").Trim()).Select(id =>
+            id.StartsWith("p", StringComparison.OrdinalIgnoreCase) ? "p" + JmClient.ParseJmId(id) : JmClient.ParseJmId(id)).ToHashSet();
+        lock (_lock)
+        {
+            if (_tasks.Any(task => ids.Contains(task.ItemId) && task.Status is not ("success" or "failed" or "cancelled")))
+                throw new ArgumentException("只能移除已完成、失败或取消的任务");
+            _tasks.RemoveAll(task => ids.Contains(task.ItemId));
+            _lastSuccessIds.RemoveAll(ids.Contains);
+            _lastFailedIds.RemoveAll(ids.Contains);
+            _dirty.RemoveWhere(ids.Contains);
+            Emit("tasks_removed", "INFO", $"已移除 {ids.Count} 个已结束任务", data: new() { ["snapshot"] = SnapshotUnlocked() });
+            return SnapshotUnlocked();
+        }
+    }
+
     public bool CancelTask(string itemId, string? baseDir = null, string? outputFormat = null)
     {
         lock (_lock)
@@ -233,8 +252,8 @@ public sealed class NativeDownloadManager : IDisposable
                         lock (_lock)
                         {
                             failedIds.Add(job.ItemId); _runningItemIds.Remove(job.ItemId); _dirty.Remove(job.ItemId);
-                            SetTaskStatusUnlocked(job.ItemId, "failed", ex.Message, job.Settings.BaseDir);
-                            Emit("item_failed", "ERROR", $"下载 {job.ItemId} 失败: {ex.Message}", job.ItemId, new() { ["snapshot"] = SnapshotUnlocked() });
+                            SetTaskStatusUnlocked(job.ItemId, "failed", StorageAccess.Describe(ex), job.Settings.BaseDir);
+                            Emit("item_failed", "ERROR", $"下载 {job.ItemId} 失败: {StorageAccess.Describe(ex)}", job.ItemId, new() { ["snapshot"] = SnapshotUnlocked() });
                         }
                     }
                     finally { lock (_lock) _jobTokens.Remove(job.ItemId); jobCts.Dispose(); }
@@ -249,7 +268,10 @@ public sealed class NativeDownloadManager : IDisposable
                 if (_runId == runId)
                 {
                     stopped |= cancellationToken.IsCancellationRequested;
-                    _lastFailedIds = failedIds; _lastSuccessIds = successIds; _lastStopped = stopped;
+                    var retainedIds = _tasks.Select(task => task.ItemId).ToHashSet();
+                    _lastFailedIds = failedIds.Where(retainedIds.Contains).ToList();
+                    _lastSuccessIds = successIds.Where(retainedIds.Contains).ToList();
+                    _lastStopped = stopped;
                     _runningItemIds.Clear(); _dirty.Clear(); _running = false;
                     var message = stopped ? "下载任务已停止" : failedIds.Count > 0 ? $"下载任务结束，失败 {failedIds.Count} 个ID" : "所有ID下载完成";
                     Emit("finished", stopped || failedIds.Count > 0 ? "WARNING" : "SUCCESS", message, data: new()
@@ -263,7 +285,7 @@ public sealed class NativeDownloadManager : IDisposable
     {
         var itemId = job.ItemId;
         var settings = job.Settings;
-        Directory.CreateDirectory(settings.BaseDir);
+        StorageAccess.RequireWritableDirectory(settings.BaseDir, "下载目录");
 
         var target = await ResolveDownloadTargetAsync(itemId, cancellationToken).ConfigureAwait(false);
         var album = target.Album;
@@ -403,8 +425,14 @@ public sealed class NativeDownloadManager : IDisposable
         var localPages = new Dictionary<string, List<string>>();
         int done = 0, total = 0;
         SetProgress(itemId, 0, 0, album.Title, "边解析章节边下载", "album_start");
+        Exception? failure = null;
+        void RecordFailure(Exception error)
+        {
+            if (error is not OperationCanceledException || !pipeline.IsCancellationRequested)
+                Interlocked.CompareExchange(ref failure, error, null);
+            pipeline.Cancel();
+        }
         var workers = Enumerable.Range(0, Math.Clamp(settings.ImageThreads, 1, 20)).Select(_ => Consume()).ToArray();
-        Exception? producerError = null;
         try
         {
             await Parallel.ForEachAsync(album.Chapters.OrderBy(c => c.Sort), new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(settings.PhotoThreads, 1, 5), CancellationToken = token }, async (chapter, ct) =>
@@ -419,12 +447,12 @@ public sealed class NativeDownloadManager : IDisposable
                 for (int i = 0; i < photo.Images.Count; i++) await channel.Writer.WriteAsync((photo, i, dir, chapter.Title), ct).ConfigureAwait(false);
             }).ConfigureAwait(false);
         }
-        catch (Exception ex) { producerError = ex; pipeline.Cancel(); }
-        finally { channel.Writer.TryComplete(producerError); }
-        if (producerError is null) SetProgress(itemId, Volatile.Read(ref done), Volatile.Read(ref total), album.Title, "全部章节已解析，继续下载剩余图片", "metadata_ready");
+        catch (Exception ex) { RecordFailure(ex); }
+        finally { channel.Writer.TryComplete(failure); }
+        if (failure is null) SetProgress(itemId, Volatile.Read(ref done), Volatile.Read(ref total), album.Title, "全部章节已解析，继续下载剩余图片", "metadata_ready");
         try { await Task.WhenAll(workers).ConfigureAwait(false); }
-        catch { pipeline.Cancel(); if (producerError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(producerError).Throw(); throw; }
-        if (producerError is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(producerError).Throw();
+        catch (Exception ex) { RecordFailure(ex); if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw(); throw; }
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
         cancellationToken.ThrowIfCancellationRequested();
         if (done == 0 || done != total) throw new IOException("图片下载不完整");
         var marker = Path.Combine(albumDir, ".jm-complete.json");
@@ -445,7 +473,7 @@ public sealed class NativeDownloadManager : IDisposable
                     SetProgress(itemId, progress, Volatile.Read(ref total), entry.Title, $"图片下载进度 {progress}/{Volatile.Read(ref total)}", "image_done");
                 }
             }
-            catch { pipeline.Cancel(); throw; }
+            catch (Exception ex) { RecordFailure(ex); throw; }
         }
     }
     private async Task DownloadImageWithFallbackAsync(PhotoDetailDto photo, int index, string dir, DownloadSettings settings, CancellationToken token)

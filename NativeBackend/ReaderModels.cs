@@ -12,6 +12,7 @@ public sealed class ReaderBook {
  [JsonPropertyName("chapters")] public List<ReaderChapterInfo> Chapters {get;set;}=[];
  [JsonPropertyName("progress")] public ReaderProgress? Progress {get;set;}
  [JsonPropertyName("favorite")] public bool Favorite {get;set;}
+ [JsonPropertyName("hidden_from_recent")] public bool HiddenFromRecent {get;set;}
  [JsonPropertyName("updated_at")] public DateTimeOffset UpdatedAt {get;set;}
  [JsonPropertyName("local")] public bool Local {get;set;}
  [JsonIgnore] public Dictionary<string,List<string>> LocalPages {get;set;}=[];
@@ -48,4 +49,11 @@ public sealed class ReaderChapterManifest {
 public sealed class ReaderPageInfo {
  [JsonPropertyName("index")] public int Index {get;set;}
  [JsonPropertyName("url")] public string Url {get;set;}="";
+}
+
+public sealed class ReaderCollectionRequest {
+ [JsonPropertyName("action")] public string Action {get;set;}="";
+ [JsonPropertyName("ids")] public List<string> Ids {get;set;}=[];
+ [JsonPropertyName("bookmarks")] public List<ReaderBookmark> Bookmarks {get;set;}=[];
+ [JsonPropertyName("favorite")] public bool Favorite {get;set;}=true;
 }

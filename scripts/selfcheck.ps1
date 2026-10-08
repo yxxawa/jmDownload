@@ -20,7 +20,7 @@ if (-not [string]::IsNullOrWhiteSpace($reportDir)) { [System.IO.Directory]::Crea
 
 Write-Host "Running packaged-app self-check: $ExecutablePath --selfcheck $ReportPath"
 $argumentLine = '--selfcheck "' + $ReportPath + '"'
-$process = Start-Process -FilePath $ExecutablePath -ArgumentList $argumentLine -WorkingDirectory ([System.IO.Path]::GetDirectoryName($ExecutablePath)) -PassThru -Wait
+$process = Start-Process -FilePath $ExecutablePath -ArgumentList $argumentLine -WorkingDirectory ([System.IO.Path]::GetDirectoryName($ExecutablePath)) -WindowStyle Hidden -PassThru -Wait
 $exitCode = $process.ExitCode
 Write-Host "PROCESS_EXIT_CODE=$exitCode"
 if ($exitCode -ne 0) { throw "Self-check process exited with code $exitCode. Report: $ReportPath" }

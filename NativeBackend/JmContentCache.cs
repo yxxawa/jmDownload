@@ -17,7 +17,8 @@ public sealed class JmContentCache : IDisposable
     public JmContentCache(string appDataRoot)
     {
         _root = Path.Combine(appDataRoot, "Cache", "content");
-        Directory.CreateDirectory(_root);
+        try { Directory.CreateDirectory(_root); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* Disk cache is optional. */ }
     }
     private static string Key(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
@@ -27,7 +28,8 @@ public sealed class JmContentCache : IDisposable
         try { return JsonNode.Parse(data) as JsonObject ?? throw new InvalidDataException("缓存内容无效"); }
         catch (System.Text.Json.JsonException)
         {
-            File.Delete(Path.Combine(_root, Key("json|" + key) + ".cache"));
+            try { File.Delete(Path.Combine(_root, Key("json|" + key) + ".cache")); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             return await factory(token).ConfigureAwait(false);
         }
     }
@@ -53,7 +55,8 @@ public sealed class JmContentCache : IDisposable
             if (bytes.Length == 0) throw new InvalidDataException("空响应不写入缓存");
             var tmp = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try { await File.WriteAllBytesAsync(tmp, bytes, _stop.Token).ConfigureAwait(false); File.Move(tmp, file, true); }
-            finally { try { File.Delete(tmp); } catch (IOException) { } }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { /* Return the fetched content when persistence is unavailable. */ }
+            finally { try { File.Delete(tmp); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } }
             Sweep();
             return bytes;
         }, LazyThreadSafetyMode.ExecutionAndPublication));
@@ -76,10 +79,10 @@ public sealed class JmContentCache : IDisposable
             {
                 size += files[i].Length;
                 if (i >= 512 || size > 64L * 1024 * 1024)
-                    try { files[i].Delete(); } catch (IOException) { }
+                    try { files[i].Delete(); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
             }
         }
-        catch (IOException) { }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         finally { Volatile.Write(ref _sweeping, 0); }
     }
     public void Dispose() => _stop.Cancel();

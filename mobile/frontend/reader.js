@@ -60,6 +60,7 @@
 
   async function init(adapter) {
     r.adapter = adapter;
+    initShelfActions();
     bind();
     try {
       r.settings = { ...defaults, ...await api('/api/reader/settings') };
@@ -502,6 +503,7 @@
       if (serial !== r.shelfSerial) return;
       r.shelf = { books: data.books || [], bookmarks: data.bookmarks || [] };
       renderShelf();
+      r.adapter.onShelfChanged?.();
     } catch (error) {
       if (serial !== r.shelfSerial) return;
       if (!r.shelf) $('#shelfList').innerHTML = `<div class="empty-state"><strong>书架读取失败</strong><p>${esc(error.message)}</p></div>`;
@@ -509,12 +511,37 @@
     }
   }
 
+
+  let shelfBulk;
+  const shelfKey = book => book.mark ? [book.mark.album_id, book.mark.chapter_id, book.mark.page].join('|') : String(book.id);
+  function shelfRows() {
+    if (!r.shelf) return [];
+    if (r.shelfFilter === 'bookmarks') return r.shelf.bookmarks.map(mark => ({ ...r.shelf.books.find(book => book.id === mark.album_id), mark })).filter(book => book.id);
+    return r.shelf.books.filter(book => r.shelfFilter === 'favorite' ? book.favorite : r.shelfFilter === 'local' ? book.local : !book.hidden_from_recent);
+  }
+  function shelfRemoveLabel() { return r.shelfFilter === 'favorite' ? '取消收藏' : r.shelfFilter === 'local' ? '移出选中' : '删除选中'; }
+  function shelfRemoveMessage(count) {
+    if (r.shelfFilter === 'favorite') return '取消选中的 ' + count + ' 个收藏？阅读记录和下载文件会保留。';
+    if (r.shelfFilter === 'bookmarks') return '删除选中的 ' + count + ' 个书签？其他书签和阅读记录会保留。';
+    if (r.shelfFilter === 'local') return '将选中的 ' + count + ' 个作品移出本地书架？磁盘上的下载文件会保留。';
+    return '删除选中的 ' + count + ' 条最近阅读记录？收藏、书签与下载文件会保留。';
+  }
+  async function removeShelfRows(rows) {
+    const action = { recent:'history', favorite:'unfavorite', bookmarks:'bookmarks', local:'local' }[r.shelfFilter];
+    await api('/api/reader/manage', json('POST', { action, ids:rows.filter(book => !book.mark).map(book => String(book.id)), bookmarks:rows.filter(book => book.mark).map(book => book.mark) }));
+    await loadShelf();
+    r.adapter.toast('书架已更新', '已处理 ' + rows.length + ' 项');
+  }
+  function initShelfActions() {
+    shelfBulk = window.JMBulk.create({ list:'#shelfList', row:'.shelf-item', key:shelfKey,
+      title:book => book.title + (book.mark ? ' 第 ' + (Number(book.mark.page) + 1) + ' 页书签' : ''),
+      removeLabel:shelfRemoveLabel, confirmLabel:() => r.shelfFilter === 'favorite' ? '取消收藏' : r.shelfFilter === 'local' ? '移出' : '删除',
+      message:shelfRemoveMessage, remove:removeShelfRows, error:error => r.adapter.toast('书架更新失败', error.message, 'error') });
+  }
+
   function renderShelf() {
     if (!r.shelf) return;
-    let rows = r.shelf.books;
-    if (r.shelfFilter === 'favorite') rows = rows.filter(b => b.favorite);
-    if (r.shelfFilter === 'local') rows = rows.filter(b => b.local);
-    if (r.shelfFilter === 'bookmarks') rows = r.shelf.bookmarks.map(mark => ({ ...r.shelf.books.find(b => b.id === mark.album_id), mark })).filter(b => b.id);
+    const rows = shelfRows();
     $('#shelfCount').textContent = `${rows.length} 项`;
     $('#shelfList').innerHTML = rows.length ? rows.map(book => {
       const progress = book.mark || book.progress;
@@ -527,10 +554,11 @@
         <div class="shelf-actions">
           <button class="shelf-read" data-shelf-open="${esc(book.id)}" ${book.mark ? `data-chapter="${esc(book.mark.chapter_id)}" data-page="${book.mark.page}"` : ''}>${progress ? '续读' : '阅读'}</button>
           <button data-shelf-favorite="${esc(book.id)}" data-favorite="${book.favorite ? '0' : '1'}" class="${book.favorite ? 'is-favorite' : ''}" aria-label="${book.favorite ? '取消收藏' : '收藏'}"><svg aria-hidden="true"><use href="#i-star"/></svg></button>
-          <button data-shelf-remove="${esc(book.id)}" aria-label="移出书架">${icon('x')}</button>
+          <button data-shelf-remove="${esc(shelfKey(book))}" aria-label="${shelfRemoveLabel()}">${icon('x')}</button>
         </div>
       </article>`;
     }).join('') : `<div class="empty-state"><strong>${r.shelfFilter === 'local' ? '还没有已完成的本地作品' : '这里还没有内容'}</strong><p>${r.shelfFilter === 'local' ? '完整的图片下载会自动登记到这里' : '从作品详情开始阅读，进度和书签会保存下来'}</p></div>`;
+    shelfBulk?.refresh(rows, r.shelfFilter);
   }
 
   /* ───────────────────────── 缓存 ───────────────────────── */
@@ -840,7 +868,11 @@
       const remove = event.target.closest('[data-shelf-remove]');
       try {
         if (favorite) await api(`/api/reader/favorites/${encodeURIComponent(favorite.dataset.shelfFavorite)}`, json('PUT', { favorite: favorite.dataset.favorite === '1' }));
-        else if (remove) await api(`/api/reader/shelf/${encodeURIComponent(remove.dataset.shelfRemove)}`, { method: 'DELETE' });
+        else if (remove) {
+          const row = shelfRows().find(book => shelfKey(book) === remove.dataset.shelfRemove);
+          if (row && await window.JMBulk.confirm(shelfRemoveMessage(1), shelfRemoveLabel())) await removeShelfRows([row]);
+          return;
+        }
         else return;
         await loadShelf();
       } catch (error) { r.adapter.toast('书架更新失败', error.message, 'error'); }

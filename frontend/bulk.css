@@ -1,0 +1,45 @@
+.bulk-toolbar { display:flex; align-items:center; gap:8px; margin:10px 0; min-height:32px; color:var(--text-2); }
+.bulk-toolbar[hidden], .bulk-controls[hidden] { display:none !important; }
+.bulk-toolbar button { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:34px; padding:6px 10px; border:0; border-radius:8px; background:transparent; color:var(--text-2); font:inherit; font-size:12px; line-height:1.25; white-space:nowrap; cursor:pointer; transition:background .16s, color .16s; }
+.bulk-toolbar button svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+.bulk-toolbar button:hover { background:var(--surface-muted, var(--surface-2)); color:var(--text); }
+.bulk-toolbar.is-managing { padding:6px; border-radius:12px; background:var(--surface-muted, var(--surface-2)); }
+.bulk-controls { display:flex; align-items:center; gap:6px; width:100%; min-width:0; }
+.bulk-count { margin-right:auto; min-width:0; font-size:12px; color:var(--text-3); white-space:nowrap; }
+.bulk-toolbar [data-bulk-all], .bulk-toolbar [data-bulk-done] { color:var(--accent); }
+.bulk-toolbar .bulk-danger { color:var(--danger); background:var(--danger-soft); }
+.bulk-toolbar .bulk-danger:hover { color:var(--danger); filter:brightness(.97); }
+.bulk-toolbar button:disabled { opacity:.4; cursor:default; }
+.bulk-row { position:relative; padding-inline-start:44px !important; cursor:pointer; transition:background .16s; }
+.bulk-picker { position:absolute; left:8px; top:50%; transform:translateY(-50%); width:30px; height:34px; display:grid; place-items:center; margin:0; cursor:pointer; }
+.bulk-choice { position:absolute; inset:0; opacity:0; width:100%; height:100%; margin:0; cursor:pointer; }
+.bulk-check { width:22px; height:22px; pointer-events:none; overflow:visible; }
+.bulk-check circle { fill:var(--surface-solid, var(--surface)); stroke:var(--line-strong); stroke-width:1.5; transition:fill .16s, stroke .16s; }
+.bulk-check path { fill:none; stroke:var(--accent-on, #fff); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:0; transition:opacity .16s; }
+.bulk-choice:checked + .bulk-check circle { fill:var(--accent); stroke:var(--accent); }
+.bulk-choice:checked + .bulk-check path { opacity:1; }
+.bulk-choice:focus-visible + .bulk-check { outline:2px solid var(--accent); outline-offset:3px; border-radius:50%; }
+.bulk-choice:disabled + .bulk-check { opacity:.5; }
+.bulk-selected { background:var(--accent-soft) !important; }
+.shelf-item.bulk-row { border-radius:12px; }
+.bulk-row .shelf-actions, .bulk-row .task-actions, .bulk-row .history-meta > div, .bulk-row .remove-selected { display:none; }
+.bulk-dialog { box-sizing:border-box; width:min(420px, calc(100% - 32px)); padding:24px; border:1px solid var(--line); border-radius:18px; color:var(--text); background:var(--surface-solid, var(--surface)); box-shadow:0 20px 60px #0003; }
+.bulk-dialog::backdrop { background:#0006; }
+.bulk-dialog h2 { margin:0 0 12px; font-size:18px; }
+.bulk-dialog p { line-height:1.7; margin:0 0 20px; font-size:14px; color:var(--text-2); }
+.bulk-dialog form > div { display:flex; justify-content:flex-end; gap:10px; }
+.bulk-dialog button { min-height:38px; padding:8px 14px; border:0; border-radius:10px; color:var(--text-2); background:var(--surface-muted, var(--surface-2)); font:inherit; font-size:13px; cursor:pointer; }
+.bulk-dialog .bulk-danger { color:var(--danger); background:var(--danger-soft); }
+.batch-favorite-button { width:100%; margin-top:8px; min-height:42px; }
+.batch-favorite-button.is-collected { color:var(--gold); }
+.batch-favorite-button[aria-busy="true"] { opacity:.55; }
+.detail-actions { flex-wrap:wrap; }
+.recent-row { flex-wrap:wrap; }
+#recentSearches.bulk-managing { display:flex; flex-direction:column; align-items:stretch; width:100%; }
+#recentSearches .bulk-row { min-height:42px; display:flex; align-items:center; text-align:left; border-radius:10px; }
+.screen-scroll > .bulk-toolbar { margin-inline:16px; }
+.history-meta .history-delete { color:var(--text-3); padding:5px; }
+.history-meta .history-delete:hover, .task-actions .remove-task:hover { color:var(--danger); background:var(--danger-soft); }
+.history-delete svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:1.7; }
+@media (max-width:600px) { .bulk-toolbar button { min-height:38px; padding:6px 9px; } .bulk-controls { gap:4px; } .bulk-count { font-size:11px; } }
+@media (prefers-reduced-motion:reduce) { .bulk-row, .bulk-toolbar button, .bulk-check circle, .bulk-check path { transition:none; } }

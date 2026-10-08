@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using SkiaSharp;
 
 namespace DesktopShell.NativeBackend;
 
@@ -50,9 +51,8 @@ public static class JmImageDecoder
     public static bool IsUsableBytes(byte[] data, string suffix)
     {
         if (!HasImageSignature(data)) return false;
-        if (suffix == ".webp") return true; // WPF has no built-in WebP encoder/decoder; browser can display raw WebP.
         try { var image = LoadBitmap(data); return image.PixelWidth > 0 && image.PixelHeight > 0 && (long)image.PixelWidth * image.PixelHeight <= 64_000_000; }
-        catch (Exception e) when (e is IOException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException) { return false; }
+        catch (Exception e) when (e is IOException or InvalidDataException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException) { return false; }
     }
 
     public static bool IsUsableImage(string path)
@@ -60,11 +60,9 @@ public static class JmImageDecoder
         try
         {
             if (new FileInfo(path).Length == 0) return false;
-            if (Path.GetExtension(path).Equals(".webp", StringComparison.OrdinalIgnoreCase))
-            { var data = File.ReadAllBytes(path); return data.Length > 12 && System.Text.Encoding.ASCII.GetString(data, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(data, 8, 4) == "WEBP"; }
             return LoadBitmap(File.ReadAllBytes(path)).PixelWidth > 0;
         }
-        catch (Exception e) when (e is IOException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException or System.IO.FileFormatException) { return false; }
+        catch (Exception e) when (e is IOException or InvalidDataException or NotSupportedException or System.Runtime.InteropServices.COMException or ArgumentException or System.IO.FileFormatException) { return false; }
     }
 
     public static PdfImageData LoadPdfImage(string imagePath)
@@ -76,6 +74,7 @@ public static class JmImageDecoder
 
     private static BitmapSource LoadBitmap(byte[] bytes)
     {
+        if (bytes.Length >= 12 && System.Text.Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" && System.Text.Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP") return LoadWebP(bytes);
         using var stream = new MemoryStream(bytes);
         var decoder = BitmapDecoder.Create(
             stream,
@@ -84,6 +83,23 @@ public static class JmImageDecoder
         var frame = decoder.Frames[0];
         frame.Freeze();
         return frame;
+    }
+
+    private static BitmapSource LoadWebP(byte[] bytes)
+    {
+        using var data = SKData.CreateCopy(bytes);
+        using var codec = SKCodec.Create(data) ?? throw new InvalidDataException("WebP 数据无效或不完整");
+        var info = codec.Info;
+        if (info.Width <= 0 || info.Height <= 0 || (long)info.Width * info.Height > 64_000_000)
+            throw new InvalidDataException("WebP 图片尺寸无效或超过 6400 万像素");
+        var pixels = new SKImageInfo(info.Width, info.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        using var bitmap = new SKBitmap(pixels);
+        var result = codec.GetPixels(pixels, bitmap.GetPixels());
+        if (result != SKCodecResult.Success) throw new InvalidDataException("WebP 解码失败：" + result);
+        var source = BitmapSource.Create(info.Width, info.Height, 96, 96, PixelFormats.Pbgra32, null,
+            bitmap.GetPixels(), bitmap.ByteCount, bitmap.RowBytes);
+        source.Freeze();
+        return source;
     }
 
     private static BitmapSource ReorderSegments(BitmapSource source, int segments)
@@ -143,6 +159,7 @@ public static class JmImageDecoder
     {
         Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
         var suffix = Path.GetExtension(savePath).ToLowerInvariant();
+        if (suffix == ".webp") { SaveWebP(source, savePath); return; }
         BitmapEncoder encoder = suffix switch
         {
             ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = 95 },
@@ -162,6 +179,23 @@ public static class JmImageDecoder
         encoder.Frames.Add(BitmapFrame.Create(source));
         using var file = File.Create(savePath);
         encoder.Save(file);
+    }
+
+    private static void SaveWebP(BitmapSource source, string savePath)
+    {
+        if (source.Format != PixelFormats.Bgra32)
+        {
+            var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            converted.Freeze(); source = converted;
+        }
+        using var bitmap = new SKBitmap(new SKImageInfo(source.PixelWidth, source.PixelHeight, SKColorType.Bgra8888, SKAlphaType.Unpremul));
+        var pixels = new byte[bitmap.ByteCount];
+        source.CopyPixels(pixels, bitmap.RowBytes, 0);
+        System.Runtime.InteropServices.Marshal.Copy(pixels, 0, bitmap.GetPixels(), pixels.Length);
+        using var image = SKImage.FromBitmap(bitmap);
+        using var encoded = image.Encode(SKEncodedImageFormat.Webp, 95) ?? throw new InvalidDataException("WebP 编码失败");
+        using var file = File.Create(savePath);
+        encoded.SaveTo(file);
     }
 
     private static byte[] EncodeJpeg(BitmapSource source, int quality)

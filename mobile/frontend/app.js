@@ -20,6 +20,7 @@
   };
   const statusLabel = status => ({ queued: '等待中', running: '下载中', success: '已完成', completed: '已完成', failed: '异常', cancelled: '已取消', stopping: '正在停止' }[status] || status || '等待中');
   const successStatus = status => status === 'success' || status === 'completed' || status === 'done';
+  const finishedStatus = status => successStatus(status) || status === 'failed' || status === 'cancelled';
   const haptic = ms => {
     if (store.raw('jm-haptics-v1', '1') === '0') return;
     let browserFeedback = false;
@@ -93,7 +94,7 @@
     items: [], selected: new Map(), config: { ...defaultConfig },
     snapshot: { running: false, stopping: false, tasks: [], last_success_ids: [], last_failed_ids: [] },
     logs: store.get('jm-logs-v2', []), history: store.get('jm-history-v2', []), recent: store.get('jm-recent-v2', []),
-    historyFilter: 'all', statFilter: 'all', saveTimer: 0, ws: null, reconnectTimer: 0, online: false,
+    historyDismissed: store.get('jm-history-dismissed-v1', {}), historyFilter: 'all', statFilter: 'all', saveTimer: 0, ws: null, reconnectTimer: 0, online: false,
     requestSerial: 0, tasksLoading: false, snapshotEventSerial: 0, resultController: null,
     detailSerial: 0, detailController: null, eventSequence: 0, historyTerminalCache: new Map(),
     searchMode: false, connected: false, wsBackoff: 2500
@@ -200,7 +201,24 @@
 
   let demoSession = null;
 
+  const demoFavoriteIds = new Set();
   async function demoApi(path, options = {}) {
+    if (path === '/api/reader/favorites' && (options.method || 'GET') === 'GET') return { ids:[...demoFavoriteIds] };
+    if (path === '/api/reader/favorites') {
+      const body = JSON.parse(options.body || '{}');
+      const ids = [...new Set(body.ids || [])].map(String), changed = [];
+      ids.forEach(id => {
+        if (demoFavoriteIds.has(id) !== body.favorite) changed.push(id);
+        if (body.favorite) demoFavoriteIds.add(id); else demoFavoriteIds.delete(id);
+      });
+      return { succeeded:ids, changed, failed:[] };
+    }
+    if (path.startsWith('/api/reader/favorites/')) {
+      const id = decodeURIComponent(path.split('/').pop()), body = JSON.parse(options.body || '{}');
+      if (body.favorite) demoFavoriteIds.add(id); else demoFavoriteIds.delete(id);
+      return { id, favorite:!!body.favorite };
+    }
+
     const wait = path.includes('tasks') ? 60 : 320;
     await new Promise(resolve => setTimeout(resolve, wait));
     const method = options.method || 'GET';
@@ -272,7 +290,6 @@
     if (path === '/api/reader/bookmarks') return { bookmarked: true };
     if (path === '/api/reader/cache') return { bytes: 0, budget_bytes: 512 * 1048576 };
     if (path.startsWith('/api/reader/progress/')) return JSON.parse(options.body || '{}');
-    if (path.startsWith('/api/reader/favorites/')) return { favorite: true };
     if (path.startsWith('/api/shell/')) return {};
     return {};
   }
@@ -329,6 +346,7 @@
   /* 返回键的统一入口：先收浮层 → 退出搜索 → 回到「发现」 → 都没有才交给外壳退出应用。
      Android 由 Activity 调用 window.__jmBack，网页版挂在浏览器后退上。 */
   function goBack() {
+    if (window.JMBulk?.closeDialog()) return true;
     if (window.JMReader?.handleBack?.()) return true;
     if (closeTopSheet()) return true;
     if (state.searchMode) { exitSearch(true); return true; }
@@ -585,6 +603,168 @@
     }
   }
 
+
+  const bulkLists = {};
+  const logKeys = new WeakMap();
+  let favoriteBusy = false;
+  function logKey(entry) {
+    if (!logKeys.has(entry)) logKeys.set(entry, String(Date.now()) + Math.random().toString(36));
+    return logKeys.get(entry);
+  }
+  function historySignature(task) {
+    const status = successStatus(task.status) ? 'success' : 'failed';
+    return (state.snapshot.run_id || '') + '|' + status + '|' + (task.base_dir || '');
+  }
+  function deleteHistory(items) {
+    const ids = new Set(items.map(item => String(item.id)));
+    for (const task of state.snapshot.tasks || []) {
+      if (ids.has(String(task.item_id)) && ['success','completed','done','failed','cancelled'].includes(task.status))
+        state.historyDismissed[String(task.item_id)] = historySignature(task);
+    }
+    store.set('jm-history-dismissed-v1', state.historyDismissed);
+    state.history = state.history.filter(item => !ids.has(String(item.id)));
+    store.set('jm-history-v2', state.history);
+    renderHistory();
+    toast('下载记录已删除', '已删除 ' + items.length + ' 条记录');
+  }
+  function deleteLogs(items) {
+    const keys = new Set(items.map(logKey));
+    state.logs = state.logs.filter(item => !keys.has(logKey(item)));
+    store.set('jm-logs-v2', state.logs); renderLogs();
+  }
+  function deleteRecent(items) {
+    const queries = new Set(items);
+    state.recent = state.recent.filter(query => !queries.has(query));
+    store.set('jm-recent-v2', state.recent); renderRecent();
+  }
+  async function confirmClear(message, remove) {
+    if (await window.JMBulk.confirm(message, '清空')) remove();
+  }
+  const favoriteIds = new Set();
+  let favoritesLoaded = false, favoriteUndo = null, favoriteStateSerial = 0;
+  const favoriteSelectionKey = ids => JSON.stringify([...ids].map(String).sort());
+  function syncFavoriteButton() {
+    const button = $('#batchFavoriteButton');
+    if (!button) return;
+    const ids = [...state.selected.keys()];
+    const single = ids.length === 1;
+    const undo = !single && ids.length > 1 && favoriteUndo?.key === favoriteSelectionKey(ids);
+    const collected = single && favoriteIds.has(String(ids[0]));
+    const label = undo ? '撤销操作' : ids.length > 1 ? '批量收藏' : collected ? '取消收藏' : '收藏';
+    button.innerHTML = icon(undo ? 'arrow-left' : 'star') + label;
+    button.disabled = ids.length === 0 || favoriteBusy;
+    button.classList.toggle('is-collected', !!collected);
+    button.setAttribute('aria-busy', String(favoriteBusy));
+    if (single) button.setAttribute('aria-pressed', String(collected)); else button.removeAttribute('aria-pressed');
+    button.title = undo ? '仅撤销本次新增的收藏，原有收藏会保留' : label;
+    const detailButton = $('#detailFavoriteButton');
+    if (detailButton?.dataset.albumId && favoritesLoaded && !detailButton.disabled) {
+      const favorite = favoriteIds.has(detailButton.dataset.albumId);
+      detailButton.dataset.favorite = favorite ? '1' : '0';
+      detailButton.innerHTML = icon('star') + (favorite ? '取消收藏' : '收藏');
+      detailButton.setAttribute('aria-pressed', String(favorite));
+    }
+  }
+  async function refreshFavoriteState() {
+    const serial = ++favoriteStateSerial;
+    try {
+      const data = await api('/api/reader/favorites');
+      if (serial !== favoriteStateSerial) return favoritesLoaded;
+      favoriteIds.clear();
+      (data.ids || []).forEach(id => favoriteIds.add(String(id)));
+      favoritesLoaded = true; syncFavoriteButton();
+      return true;
+    } catch { return false; }
+  }
+  async function favoriteSelected() {
+    if (favoriteBusy || !state.selected.size) return;
+    const ids = [...state.selected.keys()].map(String);
+    const key = favoriteSelectionKey(ids);
+    const undo = ids.length > 1 && favoriteUndo?.key === key ? favoriteUndo : null;
+    favoriteBusy = true; syncFavoriteButton();
+    try {
+      if (ids.length === 1) {
+        if (!await refreshFavoriteState()) throw new Error('无法读取收藏状态，请连接服务后重试');
+        const favorite = !favoriteIds.has(ids[0]);
+        const book = await api('/api/reader/favorites/' + encodeURIComponent(ids[0]), { method:'PUT', body:JSON.stringify({ favorite }) });
+        if (book.favorite) favoriteIds.add(ids[0]); else favoriteIds.delete(ids[0]);
+        if (favoriteUndo) favoriteUndo.ids = favoriteUndo.ids.filter(id => id !== ids[0]);
+        toast(book.favorite ? '已收藏' : '已取消收藏');
+      } else {
+        const affected = undo ? [...undo.ids] : ids;
+        const result = affected.length ? await api('/api/reader/favorites', { method:'POST', body:JSON.stringify({ ids:affected, favorite:!undo }) }) : { succeeded:[], changed:[], failed:[] };
+        const succeeded = (result.succeeded || []).map(String), failed = result.failed || [];
+        succeeded.forEach(id => { if (undo) favoriteIds.delete(id); else favoriteIds.add(id); });
+        if (undo) {
+          undo.ids = undo.ids.filter(id => !succeeded.includes(id));
+          if (!undo.ids.length) favoriteUndo = null;
+        } else favoriteUndo = { key, ids:(result.changed || []).map(String) };
+        const title = undo ? '已撤销操作' : '批量收藏完成';
+        toast(failed.length ? '部分作品处理失败' : title,
+          (undo ? '已取消本次新增收藏 ' : '收藏成功 ') + succeeded.length + ' 项' +
+          (failed.length ? '，失败 ' + failed.length + ' 项：' + failed.map(item => item.id).join('、') : ''),
+          failed.length ? 'warning' : 'success', 5000);
+      }
+      syncFavoriteButton();
+      await window.JMReader.loadShelf();
+    } catch (error) { toast('收藏更新失败', error.message, 'error'); }
+    finally { favoriteBusy = false; syncFavoriteButton(); }
+  }
+  async function toggleDetailFavorite(button, id) {
+    if (button.disabled) return;
+    button.disabled = true;
+    try {
+      const favorite = button.dataset.favorite !== '1';
+      const result = await api('/api/reader/favorites/' + encodeURIComponent(id), { method:'PUT', body:JSON.stringify({ favorite }) });
+      if (result.favorite) favoriteIds.add(String(id)); else favoriteIds.delete(String(id));
+      if (favoriteUndo) favoriteUndo.ids = favoriteUndo.ids.filter(value => value !== String(id));
+      button.dataset.favorite = result.favorite ? '1' : '0';
+      button.innerHTML = icon('star') + (result.favorite ? '取消收藏' : '收藏');
+      button.setAttribute('aria-pressed', String(!!result.favorite));
+      syncFavoriteButton();
+      await window.JMReader.loadShelf();
+    } catch (error) { toast('收藏更新失败', error.message, 'error'); }
+    finally { button.disabled = false; syncFavoriteButton(); }
+  }
+  async function removeTasks(items) {
+    const snapshot = await api('/api/tasks/remove', { method:'POST', body:JSON.stringify({ ids:items.map(task => String(task.item_id)) }) });
+    state.snapshotEventSerial++; renderSnapshot(snapshot);
+    toast('任务已删除', '已删除 ' + items.length + ' 条已结束任务');
+  }
+  async function deleteTask(id) {
+    const task = state.snapshot.tasks.find(item => String(item.item_id) === String(id));
+    if (!task || !finishedStatus(task.status)) return;
+    if (!await window.JMBulk.confirm('删除 JM ' + id + ' 的任务记录？下载文件与下载记录会保留。', '删除')) return;
+    try { await removeTasks([task]); }
+    catch (error) { toast('任务删除失败', error.message, 'error'); }
+  }
+  async function deleteHistoryItem(id) {
+    const item = state.history.find(entry => String(entry.id) === String(id));
+    if (item && await window.JMBulk.confirm('删除这条下载记录？下载文件会保留。', '删除')) deleteHistory([item]);
+  }
+  function initCollectionActions() {
+    const error = error => toast('操作失败', error.message, 'error');
+    bulkLists.history = window.JMBulk.create({ list:'#historyList', row:'.history-item',
+      message:count => '删除选中的 ' + count + ' 条下载记录？下载文件会保留。', remove:deleteHistory, error });
+    bulkLists.logs = window.JMBulk.create({ list:'#logList', row:'.log-entry', key:logKey, title:item => item.message,
+      message:count => '删除选中的 ' + count + ' 条活动记录？', remove:deleteLogs, error });
+    bulkLists.recent = window.JMBulk.create({ list:'#recentSearches', row:'.recent-entry', key:item => item, title:item => item,
+      message:count => '删除选中的 ' + count + ' 条搜索记录？', remove:deleteRecent, error });
+    bulkLists.selected = window.JMBulk.create({ list:'#selectedList', row:'.selected-item',
+      removeLabel:() => '移出选中', confirmLabel:() => '移出', message:count => '将选中的 ' + count + ' 个作品移出下载清单？',
+      remove:items => { items.forEach(item => state.selected.delete(String(item.id))); renderSelection(); syncAlbumSelection(); }, error });
+    bulkLists.tasks = window.JMBulk.create({ list:'#taskList', row:'.task-item', key:task => task.item_id, title:task => 'JM ' + task.item_id,
+      eligible:task => finishedStatus(task.status),
+      removeLabel:() => '删除选中', confirmLabel:() => '删除', message:count => '删除选中的 ' + count + ' 个已结束任务？下载文件与下载记录会保留。',
+      remove:removeTasks, error });
+    const button = document.createElement('button');
+    button.type = 'button'; button.id = 'batchFavoriteButton';
+    button.className = 'batch-favorite-button secondary-button ghost-btn';
+    button.innerHTML = icon('star') + '收藏';
+    button.onclick = favoriteSelected;
+    document.querySelector('#startDownloadButton').after(button);
+  }
+
   function rememberSearch(query) {
     state.recent = [query, ...state.recent.filter(item => item !== query)].slice(0, 8);
     store.set('jm-recent-v2', state.recent);
@@ -593,8 +773,9 @@
 
   function renderRecent() {
     $('#recentSearches').innerHTML = state.recent.length
-      ? state.recent.map(query => `<button data-recent="${escapeHtml(query)}">${escapeHtml(query)}</button>`).join('')
+      ? state.recent.map(query => `<div class="recent-entry"><button data-recent="${escapeHtml(query)}">${escapeHtml(query)}</button></div>`).join('')
       : '<div class="landing-empty">输入标题、作者或作品 ID 开始搜索</div>';
+    bulkLists.recent?.refresh(state.recent);
   }
 
   function syncLayout() {
@@ -693,6 +874,7 @@
     $('#selectedList').hidden = count === 0;
     $('#clearSelectedButton').hidden = count === 0;
     $('#startDownloadButton').disabled = count === 0 || state.snapshot.running;
+    syncFavoriteButton();
     setText('#downloadHint', state.snapshot.running ? '当前有任务正在执行' : count ? `将下载 ${count} 个作品到所选目录` : '选择作品后即可开始');
 
     const itemKey = JSON.stringify(items.map(item => [String(item.id), item.title || `作品 ${item.id}`]));
@@ -707,6 +889,7 @@
         </div>`;
       }).join('');
     }
+    bulkLists.selected?.refresh(items);
     syncFab();
   }
 
@@ -786,6 +969,7 @@
             <div class="detail-actions">
               <button class="primary-btn" id="detailReadButton">${icon('book')}${readLabel}</button>
               <button class="ghost-btn" id="detailSelectButton">${icon(selected ? 'check' : 'plus')}${selected ? '已在清单' : '加入清单'}</button>
+              <button class="ghost-btn" id="detailFavoriteButton" data-album-id="${escapeHtml(id)}" data-favorite="${book?.favorite ? '1' : '0'}" aria-pressed="${!!book?.favorite}">${icon('star')}${book?.favorite ? '取消收藏' : '收藏'}</button>
             </div>
             ${progress ? '<div class="detail-read-secondary"><button id="detailRestartButton">从第一章开始</button></div>' : ''}
             ${book?.chapters?.length ? `<details class="detail-chapter-list"><summary aria-expanded="false"><span>章节目录 · ${book.chapters.length} 章</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="detail-chapter-body" inert><div class="detail-chapter-items">${book.chapters.map(c => `<button data-detail-read-chapter="${escapeHtml(c.id)}"><span>${c.sort || ''}</span><b>${escapeHtml(c.title)}</b><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>`).join('')}</div></div></details>` : ''}
@@ -793,6 +977,7 @@
         </div>`;
       bindDetailChapters();
       hydrateCovers($('#detailContent'));
+      $('#detailFavoriteButton').onclick = () => toggleDetailFavorite($('#detailFavoriteButton'), String(id));
       $('#detailReadButton').onclick = () => window.JMReader.open(String(id));
       const restart = $('#detailRestartButton');
       if (restart) restart.onclick = () => window.JMReader.open(String(id), { fromStart: true });
@@ -1072,6 +1257,7 @@
         ${queued ? `<button data-reorder="-1" data-id="${escapeHtml(task.item_id)}" aria-label="上移" ${index === 0 ? 'disabled' : ''}>${icon('arrow-up')}</button><button data-reorder="1" data-id="${escapeHtml(task.item_id)}" aria-label="下移" ${index === totalTasks - 1 ? 'disabled' : ''}>${icon('arrow-down')}</button>` : ''}
         ${successStatus(status) ? `<button data-open-task="${escapeHtml(task.base_dir)}" aria-label="打开目录">${icon('folder')}</button>` : ''}
         ${active ? `<button class="danger" data-cancel-task="${escapeHtml(task.item_id)}" data-base-dir="${escapeHtml(task.base_dir)}" aria-label="取消任务">${icon('x')}</button>` : ''}
+        ${finishedStatus(status) ? `<button class="danger remove-task" data-remove-task="${escapeHtml(task.item_id)}" title="删除任务" aria-label="删除 JM ${escapeHtml(task.item_id)} 的任务记录">${icon('trash')}</button>` : ''}
       </div>
     </article>`;
   }
@@ -1088,11 +1274,13 @@
         renderCache.taskLayout = layoutKey;
         list.innerHTML = `<div class="empty-state"><strong>${tasks.length ? '这个筛选下没有任务' : '队列为空'}</strong><p>${tasks.length ? '点上方统计切换筛选' : '在「发现」里加入作品后开始下载'}</p></div>`;
       }
+      bulkLists.tasks?.refresh(filtered, state.statFilter);
       return;
     }
     if (renderCache.taskLayout !== layoutKey) {
       list.innerHTML = filtered.map((task, index) => taskMarkup(task, index, filtered.length)).join('');
       renderCache.taskLayout = layoutKey;
+      bulkLists.tasks?.refresh(filtered, state.statFilter);
       return;
     }
     const nodes = new Map($$('[data-task]', list).map(node => [String(node.dataset.task), node]));
@@ -1109,6 +1297,7 @@
       const width = `${percent}%`;
       if (bar && bar.style.width !== width) bar.style.width = width;
     });
+    bulkLists.tasks?.refresh(filtered, state.statFilter);
   }
 
   async function stopAll() {
@@ -1167,10 +1356,12 @@
     if (renderCache.logs === logKey) return;
     renderCache.logs = logKey;
     if (!state.logs.length) {
+      bulkLists.logs?.refresh([]);
       $('#logList').innerHTML = `<div class="empty-state"><strong>暂无活动</strong><p>下载开始后这里会记录关键事件</p></div>`;
       return;
     }
     $('#logList').innerHTML = state.logs.map(entry => `<div class="log-entry ${String(entry.level).toLowerCase()}"><i class="log-dot"></i><div><p>${escapeHtml(entry.message)}</p><time>${formatTime(entry.time)}${entry.item_id ? ` · JM ${escapeHtml(entry.item_id)}` : ''}</time></div></div>`).join('');
+    bulkLists.logs?.refresh(state.logs);
   }
 
   /* ───────────────────────── 下载记录 ───────────────────────── */
@@ -1198,6 +1389,7 @@
         : failedIds.has(String(task.item_id)) || task.status === 'failed' || task.status === 'cancelled' ? 'failed' : task.status;
       if (status === 'success' || status === 'failed') {
         const signature = `${status}|${task.base_dir || ''}`;
+        if (state.historyDismissed[String(task.item_id)] === (state.snapshot.run_id || '') + '|' + signature) return;
         if (state.historyTerminalCache.get(String(task.item_id)) === signature) return;
         state.historyTerminalCache.set(String(task.item_id), signature);
         const old = state.history.find(item => String(item.id) === String(task.item_id));
@@ -1212,6 +1404,7 @@
     if (renderCache.history === historyKey) return;
     renderCache.history = historyKey;
     if (!items.length) {
+      bulkLists.history?.refresh([], state.historyFilter);
       $('#historyList').innerHTML = `<div class="empty-state"><strong>${state.history.length ? '这个筛选下没有记录' : '还没有下载记录'}</strong><p>${state.history.length ? '切到「全部」看看' : '完成一次下载后会出现在这里'}</p></div>`;
       return;
     }
@@ -1220,9 +1413,10 @@
       return `<article class="history-item ${failed ? 'failed' : ''}">
         <span class="history-icon">${icon(failed ? 'x' : item.status === 'running' ? 'download' : 'check')}</span>
         <div class="history-copy"><strong>${escapeHtml(item.title || `作品 ${item.id}`)}</strong><p>JM ${escapeHtml(item.id)} · ${escapeHtml(item.path || '保存目录未知')}</p></div>
-        <div class="history-meta"><time>${formatTime(item.time)}</time><div><button data-history-add="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title || '')}">再下载</button><button data-history-open="${escapeHtml(item.path || '')}">打开</button></div></div>
+        <div class="history-meta"><time>${formatTime(item.time)}</time><div><button data-history-add="${escapeHtml(item.id)}" data-title="${escapeHtml(item.title || '')}">再下载</button><button data-history-open="${escapeHtml(item.path || '')}">打开</button><button class="history-delete" data-history-delete="${escapeHtml(item.id)}" title="删除记录" aria-label="删除 JM ${escapeHtml(item.id)} 的下载记录">${icon('trash')}</button></div></div>
       </article>`;
     }).join('');
+    bulkLists.history?.refresh(items, state.historyFilter);
   }
 
   /* ───────────────────────── 实时事件 ───────────────────────── */
@@ -1424,7 +1618,7 @@
     container.addEventListener('pointerdown', event => {
       if (event.pointerType === 'mouse' && event.button !== 0) return;
       const target = event.target.closest(selector);
-      if (!target || !container.contains(target) || event.target.closest('button, a, input, select, textarea')) return;
+      if (!target || !container.contains(target) || target.classList.contains('bulk-row') || event.target.closest('button, a, input, select, textarea')) return;
       node = target; startX = event.clientX; startY = event.clientY; triggered = false;
       timer = window.setTimeout(() => {
         if (!node) return;
@@ -1456,7 +1650,7 @@
     container.addEventListener('pointerdown', event => {
       if (event.pointerType === 'mouse' && event.button !== 0) return;
       const node = event.target.closest(selector);
-      if (!node || !container.contains(node) || event.target.closest('button, a, input, select, textarea')) return;
+      if (!node || !container.contains(node) || node.classList.contains('bulk-row') || event.target.closest('button, a, input, select, textarea')) return;
       gesture = { node, startX: event.clientX, startY: event.clientY, locked: false, dx: 0 };
     });
     container.addEventListener('pointermove', event => {
@@ -1581,7 +1775,7 @@
       syncSearchUi();
       $('#searchInput').focus();
     });
-    $('#clearRecent').addEventListener('click', () => { state.recent = []; store.set('jm-recent-v2', []); renderRecent(); });
+    $('#clearRecent').addEventListener('click', () => confirmClear('清空所有搜索记录？', () => deleteRecent([...state.recent])));
     $('#recentSearches').addEventListener('click', event => {
       const button = event.target.closest('[data-recent]');
       if (!button) return;
@@ -1641,7 +1835,7 @@
 
     /* 作品卡片 */
     $('#albumGrid').addEventListener('click', event => {
-      if (performance.now() - premiumState.longPressAt < 800) { event.preventDefault(); return; }
+      if (premiumState.longPressAt > 0 && performance.now() - premiumState.longPressAt < 800) { event.preventDefault(); return; }
       const toggle = event.target.closest('[data-toggle-select]');
       if (toggle) { event.stopPropagation(); toggleSelected(toggle.dataset.toggleSelect); return; }
       const detail = event.target.closest('[data-detail]');
@@ -1656,7 +1850,7 @@
       const button = event.target.closest('[data-remove-selected]');
       if (button) toggleSelected(button.dataset.removeSelected);
     });
-    $('#clearSelectedButton').addEventListener('click', () => { state.selected.clear(); renderSelection(); syncAlbumSelection(); });
+    $('#clearSelectedButton').addEventListener('click', () => confirmClear('清空下载清单？', () => { state.selected.clear(); renderSelection(); syncAlbumSelection(); }));
     $('#confirmBatchButton').addEventListener('click', confirmBatch);
     $('#batchTextarea').addEventListener('input', updateBatchPreview);
 
@@ -1702,7 +1896,7 @@
     });
     $('#stopAllButton').addEventListener('click', stopAll);
     $('#openRootButton').addEventListener('click', () => openDirectory());
-    $('#clearLogsButton').addEventListener('click', () => { state.logs = []; store.set('jm-logs-v2', []); renderLogs(); });
+    $('#clearLogsButton').addEventListener('click', () => confirmClear('清空所有活动记录？', () => deleteLogs([...state.logs])));
     $('#queueSegments').addEventListener('click', event => {
       const button = event.target.closest('[data-queue-panel]');
       if (!button) return;
@@ -1717,7 +1911,8 @@
       renderTasks(state.snapshot.tasks || []);
     }));
     $('#taskList').addEventListener('click', event => {
-      if (performance.now() - premiumState.longPressAt < 800) { event.preventDefault(); return; }
+      const remove = event.target.closest('[data-remove-task]'); if (remove) { deleteTask(remove.dataset.removeTask); return; }
+      if (premiumState.longPressAt > 0 && performance.now() - premiumState.longPressAt < 800) { event.preventDefault(); return; }
       const cancel = event.target.closest('[data-cancel-task]');
       if (cancel) { cancelTask(cancel.dataset.cancelTask, cancel.dataset.baseDir); return; }
       const reorder = event.target.closest('[data-reorder]');
@@ -1735,6 +1930,7 @@
       renderHistory();
     });
     $('#historyList').addEventListener('click', event => {
+      const remove = event.target.closest('[data-history-delete]'); if (remove) { deleteHistoryItem(remove.dataset.historyDelete); return; }
       const add = event.target.closest('[data-history-add]');
       if (add) {
         const id = add.dataset.historyAdd;
@@ -1747,7 +1943,7 @@
       const open = event.target.closest('[data-history-open]');
       if (open) openDirectory(open.dataset.historyOpen);
     });
-    $('#clearHistoryButton').addEventListener('click', () => { state.history = []; store.set('jm-history-v2', []); renderCache.history = null; renderHistory(); toast('下载记录已清空'); });
+    $('#clearHistoryButton').addEventListener('click', () => confirmClear('清空所有下载记录？下载文件会保留。', () => deleteHistory([...state.history])));
 
     /* 连接设置 */
     $('#serverTestButton').addEventListener('click', async () => {
@@ -1770,6 +1966,7 @@
   /* ───────────────────────── 启动 ───────────────────────── */
 
   async function bootstrap() {
+    initCollectionActions();
     applyTheme();
     applyMotion();
     syncLayout();
@@ -1798,7 +1995,7 @@
       api, apiRaw, icon, escapeHtml, toast, coverUrl, token: () => conn.token,
       demoMode, demoImage: demoImageResponse, nativeCall, android,
       closeSheets: closeAllSheets, closeTopSheet, openSheet, hasSheets: () => openSheets.length > 0,
-      showView, currentView: () => state.view,
+      showView, onShelfChanged:refreshFavoriteState, currentView: () => state.view,
       applyTheme, toggleTheme, addDownload: book => {
         const id = String(book.id);
         if (!state.selected.has(id)) state.selected.set(id, { id, title: book.title });
@@ -1809,7 +2006,7 @@
     loadRanking('day');
     const shortcut = new URLSearchParams(location.search).get('view');
     if (shortcut && $(`.screen[data-screen="${shortcut}"]`)) showView(shortcut);
-    await Promise.all([loadConfig(), loadTasks(), readerReady]);
+    await Promise.all([loadConfig(), loadTasks(), readerReady, refreshFavoriteState()]);
     syncOfflineBanner();
     setInterval(() => {
       if (document.hidden) return;

@@ -110,6 +110,7 @@ public sealed class ReaderStore
                     .ToList(),
                 Progress = old?.Progress,
                 Favorite = old?.Favorite ?? false,
+                HiddenFromRecent = old?.HiddenFromRecent ?? false,
                 UpdatedAt = old?.UpdatedAt ?? DateTimeOffset.UtcNow,
                 Local = old?.Local ?? false,
             };
@@ -158,25 +159,34 @@ public sealed class ReaderStore
             value.Offset = Math.Clamp(value.Offset, 0, 1);
             value.UpdatedAt = DateTimeOffset.UtcNow;
             book.Progress = value;
+            book.HiddenFromRecent = false;
             book.UpdatedAt = value.UpdatedAt;
             Save();
             return Clone(book);
         }
     }
 
-    public ReaderBook Favorite(string id, bool value)
+    public ReaderBook Favorite(string id, bool value) => Favorite(id, value, out _);
+
+    public ReaderBook Favorite(string id, bool value, out bool changed)
     {
         lock (_lock)
         {
-            if (!_state.Books.TryGetValue(id, out var book))
+            if (!_state.Books.TryGetValue(id, out var book)) throw new KeyNotFoundException("作品尚未打开");
+            changed = book.Favorite != value;
+            if (changed)
             {
-                throw new KeyNotFoundException("作品尚未打开");
+                book.Favorite = value;
+                try { Save(); }
+                catch { book.Favorite = !value; throw; }
             }
-
-            book.Favorite = value;
-            Save();
             return Clone(book);
         }
+    }
+
+    public List<string> FavoriteIds()
+    {
+        lock (_lock) return _state.Books.Values.Where(book => book.Favorite).Select(book => book.Id).ToList();
     }
 
     public List<ReaderBook> Shelf()
@@ -234,6 +244,51 @@ public sealed class ReaderStore
             _state.Books[album.Id] = book;
             _state.LocalPages[album.Id] = pages;
             Save();
+        }
+    }
+
+    public void Visit(string id)
+    {
+        lock (_lock)
+        {
+            if (!_state.Books.TryGetValue(id, out var book)) return;
+            book.HiddenFromRecent = false;
+            book.UpdatedAt = DateTimeOffset.UtcNow;
+            Save();
+        }
+    }
+
+    public int Manage(ReaderCollectionRequest request)
+    {
+        if (request.Action is not ("history" or "unfavorite" or "bookmarks" or "local"))
+            throw new ArgumentException("无效的书架操作");
+        if (request.Ids is null || request.Bookmarks is null || request.Ids.Count > 500 || request.Bookmarks.Count > 500)
+            throw new ArgumentException("每次最多处理 500 项");
+        var ids = request.Ids.Select(JmClient.ParseJmId).ToHashSet();
+        if (request.Bookmarks.Any(mark => mark is null || string.IsNullOrWhiteSpace(mark.AlbumId) ||
+            string.IsNullOrWhiteSpace(mark.ChapterId) || mark.Page < 0))
+            throw new ArgumentException("书签位置无效");
+        lock (_lock)
+        {
+            int changed = 0;
+            if (request.Action == "bookmarks")
+            {
+                var marks = request.Bookmarks.Select(mark => (mark.AlbumId, mark.ChapterId, mark.Page)).ToHashSet();
+                changed = _state.Bookmarks.RemoveAll(mark => marks.Contains((mark.AlbumId, mark.ChapterId, mark.Page)));
+            }
+            else foreach (var id in ids)
+            {
+                if (!_state.Books.TryGetValue(id, out var book)) continue;
+                switch (request.Action)
+                {
+                    case "history": if (book.HiddenFromRecent) continue; book.HiddenFromRecent = true; break;
+                    case "unfavorite": if (!book.Favorite) continue; book.Favorite = false; break;
+                    case "local": if (!book.Local) continue; book.Local = false; _state.LocalPages.Remove(id); break;
+                }
+                changed++;
+            }
+            if (changed > 0) Save();
+            return changed;
         }
     }
 

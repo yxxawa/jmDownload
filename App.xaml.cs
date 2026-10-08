@@ -26,7 +26,7 @@ public partial class App : Application
             if ((int)denied.StatusCode != 401) throw new InvalidOperationException("Reader authentication check failed");
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
             var assets = new Dictionary<string, int>();
-            foreach (var path in new[] {"index.html", "app.js", "reader.js", "reader.css"})
+            foreach (var path in new[] {"index.html", "app.js", "reader.js", "reader.css", "bulk.js", "bulk.css"})
             {
                 var text = await http.GetStringAsync(new Uri(server.BaseUri, path));
                 if (text.Length < 500) throw new InvalidOperationException("Embedded asset missing: " + path);
@@ -35,7 +35,10 @@ public partial class App : Application
             using var settings = JsonDocument.Parse(await http.GetStringAsync(new Uri(server.BaseUri, "api/reader/settings")));
             using var shelf = JsonDocument.Parse(await http.GetStringAsync(new Uri(server.BaseUri, "api/reader/shelf")));
             if (settings.RootElement.GetProperty("prefetch").GetInt32() != 3 || shelf.RootElement.GetProperty("books").GetArrayLength() != 0) throw new InvalidOperationException("Reader initialization check failed");
-            result = new { result = "PASS", embedded_assets = assets, reader_authentication = true, isolated_reader_initialization = true, upstream_requests = 0, data_root = root };
+            var webpOutput = Path.Combine(root, "webp-check.png");
+            JmImageDecoder.DecodeAndSave(Convert.FromBase64String("UklGRkgAAABXRUJQVlA4TDsAAAAvH4ADABcgEEjaH3qN+RcQFPk/2vwHXwoEAkmSS04c0f/4////////////r6qqqqqqqqqqqgIAAAAAAAA="), 3, webpOutput);
+            if (!JmImageDecoder.IsUsableImage(webpOutput)) throw new InvalidOperationException("Bundled WebP decoder check failed");
+            result = new { result = "PASS", webp_decoding = true, embedded_assets = assets, reader_authentication = true, isolated_reader_initialization = true, upstream_requests = 0, data_root = root };
         }
         catch (Exception ex) { status = 1; result = new { result = "FAIL", error = ex.ToString(), data_root = root }; }
         Directory.CreateDirectory(Path.GetDirectoryName(reportPath)!);

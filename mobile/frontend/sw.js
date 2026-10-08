@@ -1,11 +1,13 @@
 /* JM Download 手机端 Service Worker
    只缓存界面资源；/api、/ws 与图片请求一律直连，避免拿到过期的下载状态。 */
-const CACHE = 'jm-mobile-shell-v1';
+const CACHE = 'jm-mobile-shell-v2';
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './reader.css',
+  './bulk.css',
+  './bulk.js',
   './app.js',
   './reader.js',
   './manifest.webmanifest',

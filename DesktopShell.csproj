@@ -10,8 +10,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>icon.ico</ApplicationIcon>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <Version>1.1.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <FileVersion>1.1.0.0</FileVersion>
     <AllowedOutputExtensionsInSingleFileSelfExtract>.dll;.exe;.json;.config;.pdb;.xml</AllowedOutputExtensionsInSingleFileSelfExtract>
     <AllowedReferenceRelatedFileExtensions></AllowedReferenceRelatedFileExtensions>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
@@ -48,9 +50,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3967.48" />
+    <PackageReference Include="SkiaSharp" Version="4.153.1" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="docs\THIRD_PARTY_NOTICES.txt" LogicalName="THIRD_PARTY_NOTICES.txt" />
     <EmbeddedResource Include="frontend\**\*.*"
                       LogicalName="frontend/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
