@@ -1,4 +1,4 @@
-﻿using Android.App;
+using Android.App;
 using Android.Content;
 using Android.Content.PM;
 using Android.Graphics;
@@ -27,23 +27,24 @@ public class MainActivity : Activity
     private const int StorageRequestCode = 4101;
     private const int NotificationRequestCode = 4102;
 
-    private static readonly Color LightBackground = Color.ParseColor("#F4F6F3");
-    private static readonly Color DarkBackground = Color.ParseColor("#10150F");
+    private static readonly Color LightBackground = Color.ParseColor("#F5F5F5");
+    private static readonly Color DarkBackground = Color.ParseColor("#141414");
 
     private FrameLayout? _root;
     private WebView? _webView;
     private View? _splash;
-    private TextView? _splashText;
+    private BrandSplashView? _brandSplash;
+    private bool _contentStarted;
+    private bool _waitingForPageFrame;
     private int _insetLeft = -1, _insetTop = -1, _insetRight = -1, _insetBottom = -1;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
         BuildInterface();
-        ApplySystemBars(!IsSystemDark());
-        if (!BackendServiceRunning()) StartBackendService();
-        RequestNotificationPermission();
-        _ = LoadWhenReadyAsync();
+        ApplySystemBars(IsSystemDark());
+        // Commit the native artwork before WebView starts its relatively expensive engine.
+        _root!.ViewTreeObserver!.AddOnDrawListener(new LaunchDrawListener(this));
     }
 
     protected override void OnDestroy()
@@ -57,7 +58,8 @@ public class MainActivity : Activity
     protected override void OnNewIntent(Intent? intent)
     {
         base.OnNewIntent(intent);
-        _webView?.BringToFront();
+        if (_splash is not null) _splash.BringToFront();
+        else _webView?.BringToFront();
     }
 
     /* ───────────────────────── 界面 ───────────────────────── */
@@ -65,8 +67,32 @@ public class MainActivity : Activity
     private void BuildInterface()
     {
         _root = new FrameLayout(this);
-        _root.SetBackgroundColor(LightBackground);
+        _root.SetBackgroundColor(IsSystemDark() ? DarkBackground : LightBackground);
+        _root.AddView(BuildSplash(), new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
+        _root.SetOnApplyWindowInsetsListener(new RootInsetsListener(this));
+        SetContentView(_root);
+    }
 
+    private void StartContent()
+    {
+        if (_contentStarted || IsFinishing || IsDestroyed) return;
+        _contentStarted = true;
+        try
+        {
+            if (!BackendServiceRunning()) StartBackendService();
+            BuildWebView();
+            _ = LoadWhenReadyAsync();
+        }
+        catch (Exception exception)
+        {
+            _contentStarted = false;
+            ShowFailure(exception.Message);
+        }
+    }
+
+    private void BuildWebView()
+    {
         _webView = new WebView(this);
         var settings = _webView.Settings;
         settings.JavaScriptEnabled = true;
@@ -83,51 +109,30 @@ public class MainActivity : Activity
         settings.MediaPlaybackRequiresUserGesture = false;
         settings.SetGeolocationEnabled(false);
         settings.TextZoom = 100;
-        _webView.SetBackgroundColor(Color.Transparent);
+        _webView.SetBackgroundColor(IsSystemDark() ? DarkBackground : LightBackground);
         _webView.HapticFeedbackEnabled = false;
         _webView.SetWebViewClient(new LocalWebViewClient(this));
         _webView.SetWebChromeClient(new WebChromeClient());
 
-        _root.AddView(_webView, new FrameLayout.LayoutParams(
+        // Insert underneath the already visible splash; never reveal an empty WebView.
+        _root!.AddView(_webView, 0, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        _root.AddView(BuildSplash(), new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent));
-        _root.SetOnApplyWindowInsetsListener(new RootInsetsListener(this));
-
-        SetContentView(_root);
     }
 
     private View BuildSplash()
     {
-        var stack = new LinearLayout(this)
+        _brandSplash = new BrandSplashView(this);
+        _brandSplash.SetDark(IsSystemDark());
+        _brandSplash.Click += (_, _) =>
         {
-            Orientation = Orientation.Vertical,
+            if (_brandSplash?.Clickable != true) return;
+            _brandSplash.SetStatus("正在重新打开漫画世界");
+            if (!_contentStarted) StartContent();
+            else _ = LoadWhenReadyAsync();
         };
-        stack.SetGravity(GravityFlags.Center);
-        stack.SetBackgroundColor(LightBackground);
-
-        var mark = new ImageView(this);
-        mark.SetImageResource(Resource.Mipmap.ic_launcher);
-        var markSize = (int)(72 * Resources!.DisplayMetrics!.Density);
-        var markParams = new LinearLayout.LayoutParams(markSize, markSize);
-        stack.AddView(mark, markParams);
-
-        _splashText = new TextView(this) { Text = "正在启动本地服务…" };
-        _splashText.SetTextColor(Color.ParseColor("#4E5D55"));
-        _splashText.SetTextSize(Android.Util.ComplexUnitType.Sp, 13.5f);
-        var textParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WrapContent, ViewGroup.LayoutParams.WrapContent);
-        textParams.TopMargin = (int)(18 * Resources.DisplayMetrics.Density);
-        stack.AddView(_splashText, textParams);
-
-        var progress = new ProgressBar(this) { Indeterminate = true };
-        var progressParams = new LinearLayout.LayoutParams(
-            (int)(26 * Resources.DisplayMetrics.Density), (int)(26 * Resources.DisplayMetrics.Density));
-        progressParams.TopMargin = (int)(14 * Resources.DisplayMetrics.Density);
-        stack.AddView(progress, progressParams);
-
-        _splash = stack;
-        return stack;
+        _brandSplash.Clickable = false;
+        _splash = _brandSplash;
+        return _brandSplash;
     }
 
     private void HideSplash()
@@ -135,10 +140,14 @@ public class MainActivity : Activity
         var splash = _splash;
         if (splash is null || splash.Alpha < 1f && splash.Visibility != ViewStates.Visible) return;
         _splash = null;
-        splash.Animate()?.Alpha(0f)?.SetDuration(280)?.WithEndAction(new Java.Lang.Runnable(() =>
+        _brandSplash = null;
+        splash.Animate()?.Alpha(0f)?.SetDuration(180)?.WithEndAction(new Java.Lang.Runnable(() =>
         {
             splash.Visibility = ViewStates.Gone;
             (_root as ViewGroup)?.RemoveView(splash);
+            splash.Dispose();
+            // Ask only after usable content is visible, rather than covering the launch artwork.
+            if (!IsFinishing && !IsDestroyed) RequestNotificationPermission();
         }))?.Start();
     }
 
@@ -158,8 +167,14 @@ public class MainActivity : Activity
     {
         try
         {
-            await BackendHost.StartAsync(this).ConfigureAwait(false);
-            RunOnUiThread(() => _webView?.LoadUrl(BackendHost.BaseUrl + "/"));
+            await Task.Run(() => BackendHost.StartAsync(ApplicationContext!)).ConfigureAwait(false);
+            RunOnUiThread(() =>
+            {
+                if (IsFinishing || IsDestroyed) return;
+                _waitingForPageFrame = false;
+                _brandSplash?.SetStatus("正在翻开首页");
+                _webView?.LoadUrl(BackendHost.BaseUrl + "/");
+            });
         }
         catch (Exception exception)
         {
@@ -169,14 +184,28 @@ public class MainActivity : Activity
 
     private void ShowFailure(string message)
     {
-        _splashText!.Text = "本地服务启动失败\n" + message;
-        _splashText.SetTextColor(Color.ParseColor("#C84C4C"));
+        AppLog.Error("本地服务启动失败：" + message);
+        _brandSplash?.SetStatus("启动暂时遇到问题，轻点重试", failed: true);
     }
 
     internal void OnPageReady()
     {
-        HideSplash();
-        ApplySystemBars(!IsSystemDark());
+        // Page load alone does not mean Chromium has rendered the application.
+        _webView?.EvaluateJavascript("if(window.__jmAppReady)location.href='jmd://ready'", null);
+        _webView?.PostDelayed(() =>
+        {
+            if (_splash is null || _waitingForPageFrame || IsFinishing || IsDestroyed) return;
+            _webView?.EvaluateJavascript("if(window.__jmAppReady)location.href='jmd://ready'", null);
+            // Keep the artwork and offer retry if bootstrap failed; never uncover a blank page.
+            ShowFailure("首页未能完成初始化，请轻点重试");
+        }, 15000);
+    }
+
+    private void RevealPageWhenDrawn()
+    {
+        if (_splash is null || _webView is null || _waitingForPageFrame || IsFinishing || IsDestroyed) return;
+        _waitingForPageFrame = true;
+        _webView.PostVisualStateCallback(1, new FirstPageFrameCallback(this, _webView));
     }
 
     /* ───────────────────────── 系统栏 ───────────────────────── */
@@ -194,7 +223,7 @@ public class MainActivity : Activity
         var background = dark ? DarkBackground : LightBackground;
         _root?.SetBackgroundColor(background);
         _splash?.SetBackgroundColor(background);
-        _splashText?.SetTextColor(Color.ParseColor(dark ? "#B2C0B6" : "#4E5D55"));
+        _brandSplash?.SetDark(dark);
 
         if (Build.VERSION.SdkInt >= BuildVersionCodes.R)
         {
@@ -355,6 +384,9 @@ public class MainActivity : Activity
         if (uri is null) return;
         switch (uri.Host)
         {
+            case "ready":
+                RevealPageWhenDrawn();
+                break;
             case "open-folder":
                 OpenFolder(uri.GetQueryParameter("path") ?? string.Empty);
                 break;
@@ -412,6 +444,43 @@ public class MainActivity : Activity
             AppLog.Error("打开目录失败: " + exception.Message);
         }
         Toast.MakeText(this, "文件保存在：" + directory, ToastLength.Long)?.Show();
+    }
+
+    private sealed class LaunchDrawListener : Java.Lang.Object, ViewTreeObserver.IOnDrawListener
+    {
+        private readonly MainActivity _activity;
+        private bool _scheduled;
+        internal LaunchDrawListener(MainActivity activity) => _activity = activity;
+
+        public void OnDraw()
+        {
+            if (_scheduled) return;
+            _scheduled = true;
+            // Posting from OnDraw schedules the expensive work after this draw has completed.
+            _activity._root?.Post(() =>
+            {
+                var observer = _activity._root?.ViewTreeObserver;
+                if (observer?.IsAlive == true) observer.RemoveOnDrawListener(this);
+                _activity.StartContent();
+            });
+        }
+    }
+
+    private sealed class FirstPageFrameCallback : WebView.VisualStateCallback
+    {
+        private readonly MainActivity _activity;
+        private readonly WebView _view;
+        internal FirstPageFrameCallback(MainActivity activity, WebView view)
+        {
+            _activity = activity;
+            _view = view;
+        }
+
+        public override void OnComplete(long requestId)
+        {
+            if (!_activity.IsFinishing && !_activity.IsDestroyed && ReferenceEquals(_view, _activity._webView))
+                _activity.HideSplash();
+        }
     }
 
     /// <summary>

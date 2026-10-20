@@ -40,3 +40,7 @@ packages/
 .DS_Store
 Thumbs.db
 Desktop.ini
+# Local design previews, test tooling, and generated delivery packages
+/output/
+/.playwright-cli/
+/.imagegen-venv/

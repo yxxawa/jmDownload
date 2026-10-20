@@ -415,6 +415,16 @@
     toast('已加入下载清单', `新增 ${added} 个，共 ${state.selected.size} 个作品`);
   }
 
+  function searchTag(tag) {
+    const query = String(tag || '').trim();
+    if (!query) return;
+    closeModals();
+    showView('discover');
+    $('#searchInput').value = query;
+    $('#searchInput').blur();
+    search(query);
+  }
+
   async function showDetail(id) {
     state.detailController?.abort(); state.detailController=new AbortController();
     const serial=++state.detailSerial, signal=state.detailController.signal;
@@ -433,7 +443,7 @@
         <div class="detail-cover-wrap"><span class="cover-placeholder">J</span>${src?`<img class="detail-cover" src="${src}" alt="" onerror="this.style.display='none'">`:''}</div>
         <div class="detail-info"><span class="detail-overline">JM ${escapeHtml(detail.id||id)}</span><h2 id="detailTitle">${escapeHtml(detail.title||item?.title||`作品 ${id}`)}</h2>
           <p class="detail-author">${escapeHtml(detail.author?`作者：${detail.author}`:'作者信息暂缺')}</p>
-          <div class="detail-tags">${(detail.tags||[]).slice(0,8).map(t=>`<span>${escapeHtml(t)}</span>`).join('')||'<span>暂无标签</span>'}</div>
+          <div class="detail-tags">${(detail.tags||[]).map(t=>String(t??'').trim()).filter(Boolean).slice(0,8).map(t=>`<button type="button" data-search-tag="${escapeHtml(t)}" aria-label="搜索标签：${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')||'<span>暂无标签</span>'}</div>
           <div class="detail-stats"><div><strong>${detail.page_count||'—'}</strong><small>页数</small></div><div><strong>${book?.chapters?.length||'—'}</strong><small>章节</small></div></div>
           <div class="detail-actions"><button class="primary-button" id="detailReadButton">${icon('book')}${readLabel}</button><button class="secondary-button" id="detailSelectButton">${icon(selected?'check':'plus')}${selected?'已在清单中':'加入下载清单'}</button><button class="secondary-button" id="detailFavoriteButton" data-album-id="${escapeHtml(id)}" data-favorite="${book?.favorite?'1':'0'}" aria-pressed="${!!book?.favorite}">${icon('star')}${book?.favorite?'取消收藏':'收藏'}</button></div>
           ${progress?'<div class="detail-read-secondary"><button id="detailRestartButton">从第一章开始</button></div>':''}
@@ -1092,6 +1102,10 @@
   }
 
   function bindEvents() {
+    $('#detailContent').addEventListener('click', event => {
+      const tag = event.target.closest('[data-search-tag]');
+      if (tag) searchTag(tag.dataset.searchTag);
+    });
     $$('.nav-item[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
     $('#themeToggle').addEventListener('click', toggleTheme);
     $('#themeSelect').addEventListener('change', event => applyTheme(event.target.value));

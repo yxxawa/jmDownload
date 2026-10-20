@@ -50,7 +50,6 @@
   /* 工具栏浮在画面上，这里留出等高的空白，保证第一页和最后一页都不会被挡住。 */
   padding: calc(var(--safe-t) + var(--chrome-top)) 0 calc(var(--safe-b) + var(--chrome-bottom));
   transition: padding 260ms var(--ease);
-  transform: translateZ(0);
 }
 
 .reader-page {
@@ -73,7 +72,6 @@
   border-radius: 0;
   opacity: 0;
   transition: opacity 220ms var(--ease-out);
-  transform: translateZ(0);
 }
 .reader-page[data-status="ready"] img { opacity: 1; }
 
@@ -348,6 +346,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  touch-action: pan-y;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: 0 8px calc(var(--safe-b) + 16px);

@@ -13,6 +13,11 @@
     const next = String(value ?? '');
     if (node && node.textContent !== next) node.textContent = next;
   };
+  const mascotSources = {
+    reading: 'mascot-reading.webp', search: 'mascot-search.webp', collection: 'mascot-collection.webp',
+    download: 'mascot-download.webp', history: 'mascot-history.webp', retry: 'mascot-retry.webp'
+  };
+  const mascotArt = (scene = 'reading') => `<img class="mascot-empty-art" src="${mascotSources[scene] || mascotSources.reading}" width="144" height="144" alt="" decoding="async" loading="lazy">`;
   const formatTime = value => {
     const date = value ? new Date(value) : new Date();
     if (Number.isNaN(date.getTime())) return '—';
@@ -157,24 +162,10 @@
     return true;
   }
 
-  /* 演示模式没有真实封面，用一套固定的协调色板画渐变封面，界面才不会看起来是空的。 */
-  const demoCoverPalette = [
-    [160, 190], [198, 224], [30, 8], [268, 296], [118, 146], [332, 356], [78, 104], [242, 262]
-  ];
-
+  /* 演示封面为本项目原创插画，仅用于界面预览。 */
   function demoCover(id) {
-    const seed = [...String(id)].reduce((total, ch) => total + ch.charCodeAt(0), 0);
-    const [hue, hue2] = demoCoverPalette[seed % demoCoverPalette.length];
-    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 350 500">'
-      + `<defs><linearGradient id="c" x1="0" y1="0" x2="1" y2="1">`
-      + `<stop offset="0" stop-color="hsl(${hue},34%,72%)"/><stop offset="1" stop-color="hsl(${hue2},32%,48%)"/>`
-      + '</linearGradient></defs>'
-      + '<rect width="350" height="500" fill="url(#c)"/>'
-      + `<circle cx="${72 + (seed % 180)}" cy="${118 + (seed % 150)}" r="112" fill="hsl(${hue2},38%,84%)" opacity=".38"/>`
-      + '<rect x="34" y="336" width="282" height="126" rx="14" fill="#ffffff" opacity=".18"/>'
-      + '<text x="175" y="292" text-anchor="middle" font-family="sans-serif" font-size="74" font-weight="700" fill="#ffffff" opacity=".72">J</text>'
-      + '</svg>';
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const index = demoAlbums.findIndex(item => String(item.id) === String(id));
+    return `demo-cover-${(Math.max(0, index) % 8) + 1}.svg`;
   }
 
   const coverUrl = id => demoMode ? demoCover(id) : apiUrl(`/api/cover/${encodeURIComponent(id)}${conn.token ? `?token=${encodeURIComponent(conn.token)}` : ''}`);
@@ -182,10 +173,10 @@
   /* ───────────────────────── 演示数据 ───────────────────────── */
 
   const demoAlbums = [
-    ['438320', '夏日漫游指南', 1], ['422116', '午夜书店的来客', 2], ['397805', '和风小镇散步日记', 3],
-    ['451928', '雨后的玻璃花房', 4], ['375214', '週末限定的秘密旅行', 5], ['469133', '琥珀色的午後时光', 6],
-    ['408762', '城市边缘的观星者', 7], ['463501', '白昼梦与蓝色信箱', 8], ['349872', '沿海公路慢慢走', 9],
-    ['470226', '风从庭院里经过', 10], ['389410', '咖啡冷掉以前', 11], ['456708', '昨日重现的唱片店', 12]
+    ['438320', '夜航信号', 1], ['422116', '雨后第七站', 2], ['397805', '山海来信', 3],
+    ['451928', '白昼边界', 4], ['375214', '蓝色星期天', 5], ['469133', '东京无事发生', 6],
+    ['408762', '风起时再见', 7], ['463501', '银河慢车', 8], ['349872', '夜航信号', 9],
+    ['470226', '雨后第七站', 10], ['389410', '山海来信', 11], ['456708', '白昼边界', 12]
   ].map(([id, title, rank]) => ({ id, title, rank }));
 
   const demoChapters = albumId => Array.from({ length: 8 }, (_, i) => ({
@@ -310,7 +301,7 @@
     store.set('jm-theme-v2', preference);
     window.JMReader?.themeChanged?.(preference);
     const meta = $('meta[name="theme-color"]:not([media])');
-    if (meta) meta.setAttribute('content', dark ? '#111713' : '#f3f5f2');
+    if (meta) meta.setAttribute('content', dark ? '#24211c' : '#f7a51a');
     /* 让系统状态栏/导航栏跟着一起变，避免刘海区域和页面颜色对不上。 */
     nativeCall('theme', { dark: dark ? 1 : 0 });
   }
@@ -341,7 +332,9 @@
   /* ───────────────────────── 底部弹层 ───────────────────────── */
 
   const openSheets = [];
-  const SHEET_CLOSE_MS = 430;
+  const SHEET_CLOSE_MS = 240;
+  const sheetFocus = new WeakMap();
+  const reducedMotion = () => document.documentElement.dataset.motion === 'reduced' || matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   /* 返回键的统一入口：先收浮层 → 退出搜索 → 回到「发现」 → 都没有才交给外壳退出应用。
      Android 由 Activity 调用 window.__jmBack，网页版挂在浏览器后退上。 */
@@ -358,12 +351,17 @@
 
   function syncScrim() {
     const scrim = $('#scrim');
+    const readerOptionsOpen = openSheets.at(-1)?.id === 'readerOptions';
+    scrim.classList.toggle('is-reader-overlay', readerOptionsOpen);
+    $('#readerWorkspace').inert = readerOptionsOpen;
+    $('#appRoot').inert = openSheets.length > 0;
+    $$('.sheet').forEach(sheet => { sheet.inert = sheet !== openSheets.at(-1); });
     if (openSheets.length && scrim.hidden) {
       scrim.hidden = false;
       requestAnimationFrame(() => scrim.classList.add('is-open'));
     } else if (!openSheets.length && !scrim.hidden) {
       scrim.classList.remove('is-open');
-      setTimeout(() => { if (!openSheets.length) scrim.hidden = true; }, 300);
+      setTimeout(() => { if (!openSheets.length) scrim.hidden = true; }, reducedMotion() ? 0 : SHEET_CLOSE_MS);
     }
   }
 
@@ -378,14 +376,18 @@
   function dismissSheet(sheet) {
     sheet.classList.remove('is-open');
     sheet.style.transform = '';
-    setTimeout(() => { if (!sheet.classList.contains('is-open')) sheet.hidden = true; }, SHEET_CLOSE_MS);
+    if (sheet.id === 'detailSheet') { state.detailController?.abort(); state.detailSerial++; }
+    setTimeout(() => { if (!sheet.classList.contains('is-open')) sheet.hidden = true; }, reducedMotion() ? 0 : SHEET_CLOSE_MS);
   }
 
   function openSheet(sheet) {
     if (!sheet || openSheets.includes(sheet)) return;
+    sheetFocus.set(sheet, document.activeElement);
+    sheet.tabIndex = -1;
     presentSheet(sheet);
     openSheets.push(sheet);
     syncScrim();
+    sheet.focus({ preventScroll: true });
     syncFab();
   }
 
@@ -394,13 +396,17 @@
     if (!sheet) return false;
     dismissSheet(sheet);
     syncScrim();
+    const target = openSheets.at(-1) || sheetFocus.get(sheet);
+    if (target?.isConnected && !target.closest('[inert]')) target.focus({ preventScroll: true });
     syncFab();
     return true;
   }
 
   function closeAllSheets() {
+    const target = sheetFocus.get(openSheets[0]);
     while (openSheets.length) dismissSheet(openSheets.pop());
     syncScrim();
+    if (target?.isConnected && !target.closest('[inert]')) target.focus({ preventScroll: true });
     syncFab();
   }
 
@@ -449,7 +455,12 @@
       button.classList.toggle('is-active', active);
       if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
     });
-    $$('.screen').forEach(node => node.classList.toggle('is-active', node.dataset.screen === view));
+    $$('.screen').forEach(node => {
+      const active = node.dataset.screen === view;
+      node.classList.toggle('is-active', active);
+      node.inert = !active;
+      node.setAttribute('aria-hidden', String(!active));
+    });
     if (view === 'queue') { renderSnapshot(state.snapshot); renderLogs(); loadTasks(); }
     if (view === 'shelf') window.JMReader?.loadShelf();
     if (view === 'history') renderHistory();
@@ -479,13 +490,15 @@
 
   function showSkeletons(count = 8) {
     $('#resultState').hidden = true;
+    $('#albumGrid').setAttribute('aria-busy', 'true');
     $('#albumGrid').innerHTML = Array.from({ length: count }, () => `<article class="skeleton-card"><div class="cover-wrap"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></article>`).join('');
   }
 
-  function showResultState(title, message) {
+  function showResultState(title, message, scene = 'retry', retry = true) {
     $('#albumGrid').innerHTML = '';
     const box = $('#resultState');
-    box.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
+    $('#albumGrid').setAttribute('aria-busy', 'false');
+    box.innerHTML = `${mascotArt(scene)}<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>${retry ? '<button class="ghost-btn" data-retry-results>重新加载</button>' : '<button class="ghost-btn" data-edit-search>换个关键词</button>'}`;
     box.hidden = false;
     $('#loadMoreWrap').hidden = true;
     renderCache.albums = null;
@@ -503,6 +516,7 @@
     const showingResults = state.searchMode && state.mode === 'search' && !!state.query;
     screen.classList.toggle('is-searching', state.searchMode);
     screen.classList.toggle('has-query', showingResults);
+    $('#rankingTabs').hidden = state.searchMode;
     const landing = $('#searchLanding');
     landing.hidden = !state.searchMode || showingResults;
     if (!landing.hidden) renderRecent();
@@ -518,9 +532,13 @@
     const current = beginResults();
     const previous = state.mode === 'ranking' && state.rank === rank ? state.items : [];
     state.mode = 'ranking'; state.rank = rank; state.page = 1; state.query = '';
-    $('#contentTitle').textContent = '热门榜单';
+    $('#contentTitle').textContent = ({ day: '今日热门', week: '本周热门', month: '本月精选' })[rank] || '热门榜单';
     syncSearchUi();
-    $$('#rankingTabs button').forEach(b => b.classList.toggle('is-active', b.dataset.rank === rank));
+    $$('#rankingTabs button').forEach(button => {
+      const active = button.dataset.rank === rank;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
     const cached = store.get(`jm-ranking-v3-${rank}`, null);
     const existing = previous.length ? previous : (cached?.items || []);
     state.hasNext = false;
@@ -576,14 +594,14 @@
     }
   }
 
-  function enterSearch() {
+  function enterSearch({ focus = true } = {}) {
     if (state.searchMode) return;
     state.searchMode = true;
     $('#discoverBar').hidden = true;
     $('#searchBar').hidden = false;
     syncSearchUi();
     currentScroll()?.scrollTo({ top: 0 });
-    setTimeout(() => $('#searchInput').focus(), 60);
+    if (focus) setTimeout(() => $('#searchInput').focus(), 60);
   }
 
   function exitSearch(resetResults = true) {
@@ -774,7 +792,7 @@
   function renderRecent() {
     $('#recentSearches').innerHTML = state.recent.length
       ? state.recent.map(query => `<div class="recent-entry"><button data-recent="${escapeHtml(query)}">${escapeHtml(query)}</button></div>`).join('')
-      : '<div class="landing-empty">输入标题、作者或作品 ID 开始搜索</div>';
+      : `<div class="landing-empty">${mascotArt('search')}<strong>想找哪一本？</strong><p>输入标题、作者或作品 ID 开始搜索</p></div>`;
     bulkLists.recent?.refresh(state.recent);
   }
 
@@ -791,8 +809,8 @@
     const selected = state.selected.has(String(item.id));
     const src = coverUrl(item.id);
     const eager = index < 10;
-    return `<article class="album-card" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 10) * 24}ms">
-      <div class="cover-wrap" data-detail="${escapeHtml(item.id)}">
+    return `<article class="album-card" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 6) * 16}ms">
+      <div class="cover-wrap" data-detail="${escapeHtml(item.id)}" tabindex="0" aria-label="查看 ${escapeHtml(item.title || item.id)} 的详情">
         <span class="cover-placeholder">J</span>
         ${src ? `<img class="album-cover" src="${src}" alt="" loading="${eager ? 'eager' : 'lazy'}" fetchpriority="${index < 6 ? 'high' : 'auto'}" decoding="async">` : ''}
         ${item.rank ? `<span class="rank-badge ${item.rank <= 3 ? 'top' : ''}">#${item.rank}</span>` : ''}
@@ -807,9 +825,10 @@
   }
 
   function renderAlbums(items, append = false) {
+    $('#albumGrid').setAttribute('aria-busy', 'false');
     $('#resultState').hidden = true;
     $('#loadMoreWrap').hidden = !(state.mode === 'search' && state.hasNext);
-    if (!items.length) { showResultState('没有结果', '换个关键词，或用批量 ID 加入清单'); return; }
+    if (!items.length) { showResultState('没有找到这本作品', '试试更短的关键词，或直接输入作品 ID', 'search', false); return; }
     const markup = items.map(albumMarkup).join('');
     if (append) $('#albumGrid').insertAdjacentHTML('beforeend', markup);
     else $('#albumGrid').innerHTML = markup;
@@ -824,7 +843,7 @@
       const done = () => img.classList.add('is-loaded');
       if (img.complete && img.naturalWidth) { done(); return; }
       img.addEventListener('load', done, { once: true });
-      img.addEventListener('error', () => { img.remove(); }, { once: true });
+      img.addEventListener('error', () => { img.closest('.cover-wrap')?.classList.add('cover-failed'); img.remove(); }, { once: true });
     });
   }
 
@@ -888,8 +907,8 @@
           <button class="remove-selected" data-remove-selected="${escapeHtml(item.id)}" aria-label="移出清单">${icon('x')}</button>
         </div>`;
       }).join('');
+      bulkLists.selected?.refresh(items);
     }
-    bulkLists.selected?.refresh(items);
     syncFab();
   }
 
@@ -930,12 +949,28 @@
 
   /* ───────────────────────── 作品详情 ───────────────────────── */
 
+  function searchTag(tag) {
+    const query = String(tag || '').trim();
+    if (!query) return;
+    closeAllSheets();
+    showView('discover');
+    enterSearch({ focus: false });
+    $('#searchInput').value = query;
+    $('#searchInput').blur();
+    $('#searchClear').hidden = false;
+    $('#discoverScroll').scrollTo({ top: 0 });
+    search(query);
+  }
+
   async function showDetail(id) {
     state.detailController?.abort();
     state.detailController = new AbortController();
     const serial = ++state.detailSerial, signal = state.detailController.signal;
     const item = state.items.find(i => String(i.id) === String(id)) || state.selected.get(String(id));
-    $('#detailContent').innerHTML = '<div class="detail-loading"><div class="spinner"></div><p>正在读取作品信息…</p></div>';
+    $('#detailActions').hidden = true;
+    $('#detailActions').replaceChildren();
+    $('#detailContent').setAttribute('aria-busy', 'true');
+    $('#detailContent').innerHTML = '<div class="detail-skeleton skeleton-card" role="status" aria-label="正在读取作品信息"><div class="cover-wrap"></div><div><div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div></div>';
     openSheet($('#detailSheet'));
     try {
       const [detail, book] = await Promise.all([
@@ -961,7 +996,7 @@
           </div>
           <div class="detail-info">
             <p class="detail-author">${escapeHtml(detail.author ? `作者：${detail.author}` : '作者信息暂缺')}</p>
-            <div class="detail-tags">${(detail.tags || []).slice(0, 8).map(t => `<span>${escapeHtml(t)}</span>`).join('') || '<span>暂无标签</span>'}</div>
+            <div class="detail-tags">${(detail.tags || []).map(t => String(t ?? '').trim()).filter(Boolean).slice(0, 8).map(t => `<button type="button" data-search-tag="${escapeHtml(t)}" aria-label="搜索标签：${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('') || '<span>暂无标签</span>'}</div>
             <div class="detail-stats">
               <div><strong>${detail.page_count || '—'}</strong><small>页数</small></div>
               <div><strong>${book?.chapters?.length || '—'}</strong><small>章节</small></div>
@@ -975,6 +1010,9 @@
             ${book?.chapters?.length ? `<details class="detail-chapter-list"><summary aria-expanded="false"><span>章节目录 · ${book.chapters.length} 章</span><svg aria-hidden="true"><use href="#i-chevron"/></svg></summary><div class="detail-chapter-body" inert><div class="detail-chapter-items">${book.chapters.map(c => `<button data-detail-read-chapter="${escapeHtml(c.id)}"><span>${c.sort || ''}</span><b>${escapeHtml(c.title)}</b><svg aria-hidden="true"><use href="#i-chevron"/></svg></button>`).join('')}</div></div></details>` : ''}
           </div>
         </div>`;
+      $('#detailContent').setAttribute('aria-busy', 'false');
+      $('#detailActions').append($('.detail-actions', $('#detailContent')));
+      $('#detailActions').hidden = false;
       bindDetailChapters();
       hydrateCovers($('#detailContent'));
       $('#detailFavoriteButton').onclick = () => toggleDetailFavorite($('#detailFavoriteButton'), String(id));
@@ -989,7 +1027,9 @@
       };
     } catch (error) {
       if (serial !== state.detailSerial || error.name === 'AbortError') return;
-      $('#detailContent').innerHTML = `<div class="detail-loading">${icon('info')}<strong>详情读取失败</strong><p>${escapeHtml(error.message)}</p></div>`;
+      $('#detailContent').setAttribute('aria-busy', 'false');
+      $('#detailContent').innerHTML = `<div class="detail-loading">${icon('info')}<strong>详情读取失败</strong><p>${escapeHtml(error.message)}</p><button class="ghost-btn" id="detailRetryButton">重新加载</button></div>`;
+      $('#detailRetryButton').onclick = () => showDetail(id);
     }
   }
 
@@ -997,7 +1037,12 @@
     const details = $('#detailContent .detail-chapter-list');
     if (!details) return;
     const summary = $('summary', details), body = $('.detail-chapter-body', details), items = $('.detail-chapter-items', details);
-    let expanded = false, animation = null, version = 0;
+    let expanded = true, animation = null, version = 0;
+    details.open = true;
+    details.dataset.expanded = 'true';
+    summary.setAttribute('aria-expanded', 'true');
+    body.inert = false;
+    body.style.height = 'auto';
     summary.addEventListener('click', event => {
       event.preventDefault();
       const request = ++version, start = body.getBoundingClientRect().height;
@@ -1008,14 +1053,14 @@
       summary.setAttribute('aria-expanded', String(expanded));
       body.inert = !expanded;
       const end = expanded ? items.getBoundingClientRect().height : 0;
-      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const reduce = reducedMotion();
       body.style.height = `${end}px`;
       const settle = () => {
         details.open = expanded;
         body.style.height = expanded ? 'auto' : '0px';
         animation = null;
       };
-      if (reducedMotion || Math.abs(end - start) < 1) { settle(); return; }
+      if (reduce || Math.abs(end - start) < 1) { settle(); return; }
       animation = body.animate([{ height: `${start}px` }, { height: `${end}px` }], { duration: 220, easing: 'cubic-bezier(.2,.7,.25,1)' });
       animation.finished.then(() => { if (request === version) settle(); }).catch(() => { });
     });
@@ -1199,6 +1244,7 @@
   }
 
   function renderSnapshot(snapshot) {
+    const wasRunning = Boolean(state.snapshot.running);
     if (snapshot.run_id && snapshot.run_id !== state.snapshot.run_id) state.historyTerminalCache.clear();
     state.snapshot = { running: false, stopping: false, tasks: [], last_success_ids: [], last_failed_ids: [], ...snapshot };
     const tasks = state.snapshot.tasks || [];
@@ -1217,7 +1263,7 @@
     $('#stopAllButton').disabled = !state.snapshot.running || state.snapshot.stopping;
     $('#queueBadge').hidden = !state.snapshot.running;
     syncQuickActions();
-    renderSelection();
+    if (wasRunning !== Boolean(state.snapshot.running)) renderSelection();
     if (state.view === 'queue') renderTasks(tasks);
     syncHistoryFromSnapshot();
   }
@@ -1272,7 +1318,7 @@
     if (!filtered.length) {
       if (renderCache.taskLayout !== layoutKey) {
         renderCache.taskLayout = layoutKey;
-        list.innerHTML = `<div class="empty-state"><strong>${tasks.length ? '这个筛选下没有任务' : '队列为空'}</strong><p>${tasks.length ? '点上方统计切换筛选' : '在「发现」里加入作品后开始下载'}</p></div>`;
+        list.innerHTML = `<div class="empty-state">${tasks.length ? '' : mascotArt('download')}<strong>${tasks.length ? '这个筛选下没有任务' : '队列为空'}</strong><p>${tasks.length ? '点上方统计切换筛选' : '从首页选择喜欢的作品，橙奈帮你放进队列'}</p></div>`;
       }
       bulkLists.tasks?.refresh(filtered, state.statFilter);
       return;
@@ -1290,14 +1336,15 @@
       const status = task.status || 'queued';
       const percent = taskPercent(task);
       const message = task.message || task.detail || '等待处理';
-      node.dataset.totalKnown = task.total_known === false ? '0' : '1';
+      const totalKnown = task.total_known === false ? '0' : '1';
+      if (node.dataset.totalKnown !== totalKnown) node.dataset.totalKnown = totalKnown;
       setText($('.task-title-row span', node), `${statusLabel(status)} · ${taskProgressLabel(task)}`);
       setText($('.task-main p', node), message);
       const bar = $('.progress-track i', node);
       const width = `${percent}%`;
       if (bar && bar.style.width !== width) bar.style.width = width;
     });
-    bulkLists.tasks?.refresh(filtered, state.statFilter);
+    // 结构、状态和顺序未变时只更新进度，多选状态无需重绘整张列表。
   }
 
   async function stopAll() {
@@ -1405,7 +1452,7 @@
     renderCache.history = historyKey;
     if (!items.length) {
       bulkLists.history?.refresh([], state.historyFilter);
-      $('#historyList').innerHTML = `<div class="empty-state"><strong>${state.history.length ? '这个筛选下没有记录' : '还没有下载记录'}</strong><p>${state.history.length ? '切到「全部」看看' : '完成一次下载后会出现在这里'}</p></div>`;
+      $('#historyList').innerHTML = `<div class="empty-state">${state.history.length ? '' : mascotArt('history')}<strong>${state.history.length ? '这个筛选下没有记录' : '还没有下载记录'}</strong><p>${state.history.length ? '切到「全部」看看' : '完成一次下载后会出现在这里'}</p></div>`;
       return;
     }
     $('#historyList').innerHTML = items.map(item => {
@@ -1738,10 +1785,39 @@
   /* ───────────────────────── 事件绑定 ───────────────────────── */
 
   function bindEvents() {
+    $('#detailContent').addEventListener('click', event => {
+      const tag = event.target.closest('[data-search-tag]');
+      if (tag) searchTag(tag.dataset.searchTag);
+    });
     $$('.tab[data-view]').forEach(button => button.addEventListener('click', () => { haptic(6); showView(button.dataset.view); }));
     $$('[data-close-sheet]').forEach(button => button.addEventListener('click', () => closeTopSheet()));
     $('#scrim').addEventListener('click', () => closeTopSheet());
     $$('.sheet').forEach(bindSheetDrag);
+    $('#resultState').addEventListener('click', event => {
+      if (event.target.closest('[data-edit-search]')) {
+        $('#discoverScroll').scrollTo({ top: 0, behavior: 'instant' });
+        $('#searchInput').focus();
+        $('#searchInput').select();
+        return;
+      }
+      if (!event.target.closest('[data-retry-results]')) return;
+      if (state.mode === 'search' && state.query) search(state.query); else loadRanking(state.rank);
+    });
+    $('#albumGrid').addEventListener('keydown', event => {
+      if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('.cover-wrap[data-detail]')) {
+        event.preventDefault(); showDetail(event.target.dataset.detail);
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && openSheets.length) { event.preventDefault(); closeTopSheet(); return; }
+      if (event.key !== 'Tab' || !openSheets.length) return;
+      const sheet = openSheets.at(-1);
+      const controls = $$('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]', sheet).filter(node => node.getClientRects().length && !node.closest('[inert]'));
+      const first = controls[0], last = controls.at(-1);
+      if (!first) { event.preventDefault(); sheet.focus(); }
+      else if (event.shiftKey && (document.activeElement === first || document.activeElement === sheet)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === sheet)) { event.preventDefault(); first.focus(); }
+    });
 
     $('#themeToggle').addEventListener('click', toggleTheme);
     $('#themeSelect').addEventListener('change', event => applyTheme(event.target.value));
@@ -1801,7 +1877,7 @@
       if (!button || button.classList.contains('is-active')) return;
       haptic(6);
       loadRanking(button.dataset.rank);
-      currentScroll()?.scrollTo({ top: 0, behavior: 'smooth' });
+      currentScroll()?.scrollTo({ top: 0, behavior: reducedMotion() ? 'instant' : 'smooth' });
     });
     $('#layoutPicker').addEventListener('click', event => {
       const button = event.target.closest('[data-layout]');
@@ -1993,7 +2069,7 @@
     connectWebSocket();
     const readerReady = window.JMReader.init({
       api, apiRaw, icon, escapeHtml, toast, coverUrl, token: () => conn.token,
-      demoMode, demoImage: demoImageResponse, nativeCall, android,
+      demoMode, demoImage: demoImageResponse, nativeCall, android, mascotArt,
       closeSheets: closeAllSheets, closeTopSheet, openSheet, hasSheets: () => openSheets.length > 0,
       showView, onShelfChanged:refreshFavoriteState, currentView: () => state.view,
       applyTheme, toggleTheme, addDownload: book => {
@@ -2004,6 +2080,11 @@
       }
     });
     loadRanking('day');
+    showView('discover');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.__jmAppReady = true;
+      nativeCall('ready');
+    }));
     const shortcut = new URLSearchParams(location.search).get('view');
     if (shortcut && $(`.screen[data-screen="${shortcut}"]`)) showView(shortcut);
     await Promise.all([loadConfig(), loadTasks(), readerReady, refreshFavoriteState()]);

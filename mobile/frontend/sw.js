@@ -1,17 +1,27 @@
 /* JM Download 手机端 Service Worker
    只缓存界面资源；/api、/ws 与图片请求一律直连，避免拿到过期的下载状态。 */
-const CACHE = 'jm-mobile-shell-v2';
+const CACHE = 'jm-mobile-performance-v7';
 const SHELL = [
   './',
   './index.html',
   './styles.css',
   './reader.css',
   './bulk.css',
+  './classic.css',
+  './brand.css',
+  './brand-avatar.webp',
+  './mascot-reading.webp',
+  './mascot-welcome.webp',
+  './mascot-home.webp',
+  './mascot-search.webp',
+  './mascot-collection.webp',
+  './mascot-download.webp',
+  './mascot-history.webp',
+  './mascot-retry.webp',
   './bulk.js',
   './app.js',
   './reader.js',
   './manifest.webmanifest',
-  'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png'
 ];

@@ -10,13 +10,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>icon.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.1.3</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <AssemblyVersion>1.1.0.0</AssemblyVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.3.0</AssemblyVersion>
+    <FileVersion>1.1.3.0</FileVersion>
     <AllowedOutputExtensionsInSingleFileSelfExtract>.dll;.exe;.json;.config;.pdb;.xml</AllowedOutputExtensionsInSingleFileSelfExtract>
     <AllowedReferenceRelatedFileExtensions></AllowedReferenceRelatedFileExtensions>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- Build artifacts and source snapshots are never application inputs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;release\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(RuntimeIdentifier)' != '' and '$(SmokeTest)' != 'true'">
@@ -25,6 +27,9 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Keep Chinese framework messages; English is embedded in the neutral assemblies.
+         Set IncludeAllLanguages=true to publish every optional translation. -->
+    <SatelliteResourceLanguages Condition="'$(SatelliteResourceLanguages)' == '' and '$(IncludeAllLanguages)' != 'true'">zh-Hans;zh-Hant</SatelliteResourceLanguages>
     <PublishTrimmed>false</PublishTrimmed>
     <PublishReadyToRun>false</PublishReadyToRun>
     <DebugType>None</DebugType>
@@ -59,11 +64,25 @@
                       LogicalName="frontend/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
-  <Target Name="RemoveXmlDocsFromPublish" AfterTargets="Publish">
+  <!-- NuGet may ship native .pdb files even when DebugSymbols=false.
+       Filter only debug symbols; every managed/native runtime dependency stays in the bundle. -->
+  <Target Name="ExcludePublishDebugSymbols" AfterTargets="ComputeFilesToPublish"
+          Condition="'$(Configuration)' == 'Release' and '$(SmokeTest)' != 'true'">
+    <ItemGroup>
+      <PublishDebugSymbols Include="@(ResolvedFileToPublish)"
+                           Condition="'%(ResolvedFileToPublish.Extension)' == '.pdb'" />
+      <ResolvedFileToPublish Remove="@(PublishDebugSymbols)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="RemoveDevelopmentArtifactsFromPublish" AfterTargets="Publish">
     <ItemGroup>
       <PublishedXmlDocs Include="$(PublishDir)*.xml" />
+      <!-- Also clean top-level symbols left by a previous publish into the same directory. -->
+      <StalePublishedDebugSymbols Include="$(PublishDir)*.pdb"
+                                 Condition="'$(Configuration)' == 'Release' and '$(SmokeTest)' != 'true'" />
     </ItemGroup>
-    <Delete Files="@(PublishedXmlDocs)" />
+    <Delete Files="@(PublishedXmlDocs);@(StalePublishedDebugSymbols)" />
   </Target>
 
   <!--

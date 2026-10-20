@@ -1,6 +1,6 @@
 # JM Download
 
-**JM Download** 是一款面向 Windows 的漫画检索、整理、下载与在线阅读桌面程序。桌面外壳使用 WPF，工作区使用 WebView2，应用本地后端使用 C#/.NET 实现。
+**JM Download** 是一款面向 Windows 与 Android 的漫画检索、整理、下载与在线阅读程序。Windows 外壳使用 WPF 与 WebView2，Android 使用原生 WebView 外壳；两端共享 C#/.NET 本地后端。
 
 ![应用界面预览](assets/app-preview.png)
 
@@ -11,7 +11,7 @@
 ### 发现与管理
 
 - 关键词搜索、作品 ID 搜索和排行榜浏览。
-- 作品详情、封面、作者、章节与标签展示。
+- 作品详情、封面、作者、章节与标签展示；点击标签直接跳转搜索。
 - 下载队列、任务进度、取消/停止、任务排序。
 - 导出为图片目录、ZIP 或 PDF；可配置图片格式和 PDF 组织方式。
 - 下载目录、并发数和界面偏好保存在本机。
@@ -36,9 +36,22 @@
 
 **版本提示：** 当前项目目标框架为 `net9.0-windows`。截至 2026-10-01，.NET 9 的官方支持结束日期为 **2026-11-10**。维护者发布新版本前应评估迁移到受支持的目标框架；迁移前请勿把本仓库的当前目标框架描述为长期支持版本。
 
+## 下载正式版
+
+当前发布：**20261020**，Windows **1.1.3**，Android **1.3.5**（versionCode 10）。完整说明见 [Release](https://github.com/yxxawa/jmDownload/releases/tag/20261020)。
+
+| 设备 | 安装包 | 大小 |
+| --- | --- | --- |
+| 常见 Intel / AMD Windows 电脑 | [JMDownload-win-x64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-win-x64.exe) | 63.0 MiB |
+| Windows on ARM64 | [JMDownload-win-arm64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-win-arm64.exe) | 59.2 MiB |
+| 常见 64 位安卓手机，推荐 | [JMDownload-android-arm64.apk](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-android-arm64.apk) | 22.3 MiB |
+| 32 位安卓设备或 x86_64 模拟器 | [JMDownload-android.apk](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-android.apk) | 64.4 MiB |
+
+Windows 为自包含单文件程序，保留 .NET、WPF、WebView2 桥接和图片处理依赖；系统仍需已安装 WebView2 Runtime。两个安卓包共用包名和签名，可覆盖更新并保留数据。
+
 ## 获取构建产物
 
-仓库中的 GitHub Actions 工作流会在 `main`/`master` 分支推送、Pull Request 或手动触发时构建并自检 Windows x64 与 ARM64 版本。成功运行后，可从对应工作流运行页面下载构建产物：
+仓库中的 GitHub Actions 工作流会在 `main`/`master` 分支推送、Pull Request 或手动触发时构建 Windows x64 与 ARM64 版本，并在 x64 运行器上自检 x64 程序。ARM64 包在此工作流中交叉构建，运行验证需使用 ARM64 设备。成功运行后，可从对应工作流运行页面下载构建产物：
 
 | 设备 | Actions 产物名称 | 包内可执行文件 |
 | --- | --- | --- |
@@ -90,6 +103,8 @@ dotnet publish .\DesktopShell.csproj `
 ```
 
 ARM64 构建时将 `win-x64` 改为 `win-arm64`。程序包包含对应架构的 .NET 运行时与应用依赖；WebView2 Evergreen Runtime 仍由目标设备提供。
+
+Release 发布会自动排除 `.pdb` 调试符号，并清理同一发布目录中上一次留下的顶层 `.pdb`。这些文件供开发调试使用，不是运行依赖；SkiaSharp 的原生 DLL 和 .NET/WPF 功能程序集继续保留在单文件程序内。默认只携带简体中文、繁体中文的系统提示翻译，英文提示由主程序集提供；如需全部语言，可给发布脚本加 `-IncludeAllLanguages`。`DebugSymbols=false` 本身不能阻止第三方 NuGet 包携带原生 PDB，因此这里另行在发布阶段过滤。
 
 ## 运行打包自检
 

@@ -1,13 +1,16 @@
-﻿# JM Download 手机端 · 构建 APK
+# JM Download 手机端 · 构建 APK
 #
 #   powershell -ExecutionPolicy Bypass -File mobile\android\tools\build-apk.ps1
 #
-# 默认构建已签名的 Release APK，输出到 mobile/android/dist/。
+# 默认构建已签名的 arm64 Release APK；-Architecture universal 生成兼容版。
+# 输出到 mobile/android/dist/。
 # 第一次运行会在工具链目录里生成一个自签名密钥（不会写进仓库）。
 
 [CmdletBinding()]
 param(
     [string] $Configuration = 'Release',
+    [ValidateSet('arm64', 'universal')]
+    [string] $Architecture = 'arm64',
     [string] $Toolchain = 'C:\jm-mobile-toolchain',
     [string] $OutputDirectory,
     [switch] $DebugBuild,
@@ -77,18 +80,27 @@ if ($Configuration -eq 'Release') {
 if (-not $Incremental) {
     Write-Step '清理构建中间产物'
     foreach ($path in @((Join-Path $projectRoot 'bin'), (Join-Path $projectRoot 'obj'))) {
-        Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue
+        $resolvedTarget = [System.IO.Path]::GetFullPath($path)
+        $allowedTargets = @((Join-Path $projectRoot 'bin'), (Join-Path $projectRoot 'obj'))
+        if ($resolvedTarget -notin $allowedTargets -or -not $resolvedTarget.StartsWith($projectRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "清理路径超出构建目录：$resolvedTarget"
+        }
+        if (Test-Path -LiteralPath $resolvedTarget) { Remove-Item -LiteralPath $resolvedTarget -Recurse -Force }
     }
 }
 
 $buildArgs = @()
+if ($Architecture -eq 'arm64') {
+    # 日常手机包只携带一套运行库；兼容版仍使用项目里声明的三种架构。
+    $buildArgs += '-p:RuntimeIdentifiers=android-arm64'
+}
 if ($Configuration -eq 'Debug') {
     # Debug 默认走「快速部署」，生成的 APK 单独拷到手机上装不起来，必须把程序集打进包。
     # Release 不能加这个开关，.NET 10 下会产出启动即崩的包。
     $buildArgs += '-p:EmbedAssembliesIntoApk=true'
 }
 
-Write-Step "构建 $Configuration APK"
+Write-Step "构建 $Configuration / $Architecture APK"
 & dotnet build $project -c $Configuration -v minimal @signingArgs @buildArgs
 if ($LASTEXITCODE -ne 0) { throw '构建失败' }
 
@@ -109,7 +121,7 @@ Copy-Item -Force $built.FullName $target
 $size = [math]::Round((Get-Item $target).Length / 1MB, 1)
 Write-Host ''
 Write-Host "APK  $target" -ForegroundColor Green
-Write-Host "     大小 $size MB · $Configuration"
+Write-Host "     大小 $size MB · $Configuration · $Architecture"
 Write-Host ''
 Write-Host '安装：'
 Write-Host "  adb install -r `"$target`""

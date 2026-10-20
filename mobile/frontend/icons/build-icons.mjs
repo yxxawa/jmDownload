@@ -2,7 +2,7 @@
  * JM Download 图标生成器（单一来源）
  *
  * 一次生成 Web/PWA 与 Android 两套图标，几何完全一致：
- * 圆角方底 + 白色 “J” 字形。
+ * 使用审核后的 Q 版角色原画生成启动器、圆形、自适应与网页图标。
  *
  *   node mobile/frontend/icons/build-icons.mjs
  *
@@ -10,13 +10,73 @@
  *   mobile/frontend/icons     PWA / 网页图标
  *   mobile/android/Resources  Android 各密度图标
  */
-import { deflateSync } from 'node:zlib';
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { deflateSync, inflateSync } from 'node:zlib';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const androidRes = resolve(here, '..', '..', 'android', 'Resources');
+
+/* Reviewed raster artwork is the source; the procedural J is retained only as fallback. */
+const brandPath = join(here, 'brand-avatar.png');
+const brand = existsSync(brandPath) ? readRgbaPng(readFileSync(brandPath)) : null;
+
+function readRgbaPng(bytes) {
+  let offset = 8, width = 0, height = 0;
+  const chunks = [];
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    const type = bytes.toString('ascii', offset + 4, offset + 8);
+    const data = bytes.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0); height = data.readUInt32BE(4);
+      if (data[8] !== 8 || data[9] !== 6 || data[12] !== 0) throw new Error('brand-avatar.png must be non-interlaced 8-bit RGBA. Run mobile/branding/build-assets.py.');
+    }
+    if (type === 'IDAT') chunks.push(data);
+    offset += length + 12;
+  }
+  const decoded = inflateSync(Buffer.concat(chunks));
+  const stride = width * 4, rgba = Buffer.alloc(stride * height);
+  const paeth = (a,b,c) => { const p=a+b-c, pa=Math.abs(p-a), pb=Math.abs(p-b), pc=Math.abs(p-c); return pa<=pb&&pa<=pc?a:pb<=pc?b:c; };
+  let source = 0;
+  for (let y=0;y<height;y++) {
+    const filter=decoded[source++];
+    if (filter > 4) throw new Error('Unsupported PNG filter');
+    for (let x=0;x<stride;x++) {
+      const index=y*stride+x, left=x>=4?rgba[index-4]:0, up=y?rgba[index-stride]:0, upperLeft=y&&x>=4?rgba[index-stride-4]:0;
+      const correction=filter===1?left:filter===2?up:filter===3?Math.floor((left+up)/2):filter===4?paeth(left,up,upperLeft):0;
+      rgba[index]=(decoded[source++]+correction)&255;
+    }
+  }
+  return {width,height,rgba};
+}
+
+function renderBranded(size, shape) {
+  const rgba = Buffer.alloc(size * size * 4);
+  const foreground = shape === 'foreground';
+  const scale = foreground ? .82 : 1;
+  for (let y=0;y<size;y++) for(let x=0;x<size;x++) {
+    const index=(y*size+x)*4;
+    let coverage=0;
+    for(let sy=0;sy<SAMPLES;sy++) for(let sx=0;sx<SAMPLES;sx++) {
+      const u=(x+(sx+.5)/SAMPLES)/size, v=(y+(sy+.5)/SAMPLES)/size;
+      if(foreground||shape==='maskable'||(shape==='circle'?insideCircle(u,v):insideRoundedRect(u,v,.22)))coverage++;
+    }
+    const u=((x+.5)/size-.5)/scale+.5, v=((y+.5)/size-.5)/scale+.5;
+    if(foreground&&(u<0||u>1||v<0||v>1))continue;
+    const sourceX=Math.max(0,Math.min(brand.width-1,u*brand.width-.5));
+    const sourceY=Math.max(0,Math.min(brand.height-1,v*brand.height-.5));
+    const x0=Math.floor(sourceX), y0=Math.floor(sourceY), x1=Math.min(brand.width-1,x0+1), y1=Math.min(brand.height-1,y0+1), fx=sourceX-x0, fy=sourceY-y0;
+    for(let channel=0;channel<4;channel++) {
+      const p00=brand.rgba[(y0*brand.width+x0)*4+channel], p10=brand.rgba[(y0*brand.width+x1)*4+channel];
+      const p01=brand.rgba[(y1*brand.width+x0)*4+channel], p11=brand.rgba[(y1*brand.width+x1)*4+channel];
+      rgba[index+channel]=Math.round((p00*(1-fx)+p10*fx)*(1-fy)+(p01*(1-fx)+p11*fx)*fy);
+    }
+    rgba[index+3]=Math.round(rgba[index+3]*coverage/(SAMPLES*SAMPLES));
+  }
+  return encodePng(size,rgba);
+}
 
 /* ── PNG 编码 ── */
 
@@ -109,6 +169,7 @@ const insideCircle = (px, py) => Math.hypot(px - 0.5, py - 0.5) <= 0.5;
 const SAMPLES = 3;
 // shape: rounded（圆角方）| circle（圆形）| maskable（满幅，图形缩到安全区）| foreground（透明底白字，供自适应图标）
 function render(size, shape) {
+  if (brand) return renderBranded(size, shape);
   const rgba = Buffer.alloc(size * size * 4);
   const scale = shape === 'maskable' || shape === 'foreground' ? 0.72 : 1;
   const paintBackground = shape !== 'foreground';
@@ -131,7 +192,7 @@ function render(size, shape) {
       const coverage = bgHits / total;
       const glyph = fgHits / total;
       const t = (x / size + y / size) / 2;
-      let r = lerp(0x3d, 0x22, t), g = lerp(0x8a, 0x5f, t), b = lerp(0x66, 0x44, t);
+      let r = lerp(0xf7, 0xed, t), g = lerp(0xad, 0x94, t), b = lerp(0x29, 0x0d, t);
       if (!paintBackground) { r = g = b = 255; }
       else { r = lerp(r, 255, glyph); g = lerp(g, 255, glyph); b = lerp(b, 255, glyph); }
       const offset = (y * size + x) * 4;

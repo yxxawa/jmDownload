@@ -10,7 +10,7 @@
     context: null, settings: { ...defaults }, bookmarks: [], zoom: 100, saveTimer: 0, windowTimer: 0,
     scrollFrame: 0, restoreView: 'discover', shelfFilter: 'recent', shelf: null, shelfSerial: 0,
     revision: 0, windowRevision: 0, settingsTimer: 0, settingsLoaded: false, immersive: false,
-    toastTimer: 0, zoomBadgeTimer: 0, gesture: null, lastTap: 0
+    toastTimer: 0, zoomBadgeTimer: 0, gesture: null, lastTap: 0, controlsKey: null
   };
 
   const esc = value => r.adapter.escapeHtml(value);
@@ -42,8 +42,8 @@
     if (state) state.url = '';
   }
 
-  function message(text, retry) {
-    canvas().innerHTML = `<div class="reader-message">${esc(text)}${retry ? '<button id="readerChapterRetry">重新加载本章</button>' : ''}</div>`;
+  function message(text, retry, failed = false) {
+    canvas().innerHTML = `<div class="reader-message${failed ? ' reader-message-error' : ''}">${failed ? r.adapter.mascotArt('retry') : ''}<span>${esc(text)}</span>${retry ? '<button id="readerChapterRetry">重新加载本章</button>' : ''}</div>`;
     if (retry) $('#readerChapterRetry').onclick = () => loadChapter(retry, r.page);
   }
 
@@ -107,7 +107,7 @@
       await loadChapter(chapter, options.page ?? progress?.page ?? 0, options.page == null ? progress?.offset || 0 : 0);
     } catch (error) {
       if (!r.active || generation !== r.generation) return;
-      message(`暂时无法打开作品：${error.message}`);
+      message(`暂时无法打开作品：${error.message}`, null, true);
       r.adapter.toast('阅读打开失败', error.message, 'error');
     }
   }
@@ -136,7 +136,7 @@
     if (r.chapter) await saveProgress(true);
     abortContext();
     const generation = ++r.generation;
-    const context = { generation, controller: new AbortController(), pages: new Map(), slots: [], allowed: new Set(), pending: 0, aborted: false, restoring: true };
+    const context = { generation, controller: new AbortController(), pages: new Map(), slots: [], slotMap: new Map(), windowKey: null, allowed: new Set(), pending: 0, aborted: false, restoring: true };
     r.context = context; r.chapter = null;
     $('#readerChapterTitle').textContent = r.book.chapters.find(c => c.id === chapterId)?.title || '';
     message('正在加载当前章节…');
@@ -163,7 +163,7 @@
       });
     } catch (error) {
       if (!r.active || r.context !== context || error.name === 'AbortError') return;
-      message(`章节读取失败：${error.message}`, chapterId);
+      message(`章节读取失败：${error.message}`, chapterId, true);
     }
   }
 
@@ -179,15 +179,19 @@
       : r.settings.mode === 'spread' ? [r.page, r.page + 1].filter(i => i < r.chapter.page_count) : [r.page];
     node.innerHTML = indexes.map(i => `<div class="reader-page" data-page="${i}" data-status="idle"><div class="reader-placeholder">第 ${i + 1} 页 · 等待加载</div></div>`).join('');
     context.slots = [...node.querySelectorAll('.reader-page')];
+    context.slotMap = new Map(context.slots.map(slot => [Number(slot.dataset.page), slot]));
+    context.windowKey = null;
     context.slots.forEach(slot => paint(slot, context.pages.get(Number(slot.dataset.page))));
   }
 
   function paint(slot, pageState) {
     const index = Number(slot.dataset.page);
-    slot.dataset.status = pageState?.status || 'idle';
+    const status = pageState?.status || 'idle';
+    if (slot.dataset.status !== status) slot.dataset.status = status;
     if (pageState?.width && pageState.height) {
-      slot.style.aspectRatio = `${pageState.width} / ${pageState.height}`;
-      slot.style.setProperty('--natural-width', `${pageState.width}px`);
+      const ratio = `${pageState.width} / ${pageState.height}`, width = `${pageState.width}px`;
+      if (slot.style.aspectRatio !== ratio) slot.style.aspectRatio = ratio;
+      if (slot.style.getPropertyValue('--natural-width') !== width) slot.style.setProperty('--natural-width', width);
     }
     if (pageState?.status === 'ready') {
       const existing = slot.querySelector('img');
@@ -207,27 +211,44 @@
     if (!r.context || !r.chapter) return [r.page, r.page];
     if (!isVertical()) return [r.page, Math.min(r.chapter.page_count - 1, r.page + (r.settings.mode === 'spread' ? 1 : 0))];
     const box = viewport().getBoundingClientRect();
-    const visible = r.context.slots.filter(slot => {
-      const rect = slot.getBoundingClientRect();
-      return rect.bottom > box.top + 2 && rect.top < box.bottom - 2;
-    });
-    if (!visible.length) return [r.page, r.page];
-    return [Number(visible[0].dataset.page), Number(visible[visible.length - 1].dataset.page)];
+    const slots = r.context.slots;
+    // 竖排页面按位置排序，用二分定位可见区；长章节滚动时不再扫描整章。
+    let low = 0, high = slots.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (slots[mid].getBoundingClientRect().bottom <= box.top + 2) low = mid + 1;
+      else high = mid;
+    }
+    const first = low;
+    if (first >= slots.length || slots[first].getBoundingClientRect().top >= box.bottom - 2) return [r.page, r.page];
+    high = slots.length;
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      if (slots[mid].getBoundingClientRect().top < box.bottom - 2) low = mid + 1;
+      else high = mid;
+    }
+    return [Number(slots[first].dataset.page), Number(slots[low - 1].dataset.page)];
   }
 
-  async function updateWindow(context = r.context, immediate = false) {
+  async function updateWindow(context = r.context, immediate = false, range = null) {
     if (!context || r.context !== context || !r.chapter) return;
-    const [start, end] = visibleRange();
+    const [start, end] = range || visibleRange();
     const first = Math.max(0, start - 1);
     const last = Math.min(r.chapter.page_count - 1, end + Number(r.settings.prefetch));
+    const key = `${start}:${end}:${first}:${last}`;
+    if (!immediate && context.windowKey === key) return;
+    context.windowKey = key;
     context.allowed = new Set(Array.from({ length: last - first + 1 }, (_, i) => i + first));
     /* 只保留少量页面留在内存里，空槽位继续占位以保持滚动高度稳定。 */
     context.pages.forEach((state, i) => {
       if (context.allowed.has(i)) return;
       state.controller?.abort();
       releaseUrl(state);
-      if (state.status !== 'error') state.status = 'idle';
-      const slot = context.slots.find(n => Number(n.dataset.page) === i);
+      if (state.status !== 'error') {
+        state.status = 'idle';
+        context.pages.delete(i);
+      }
+      const slot = context.slotMap.get(i);
       if (slot) paint(slot, state);
     });
     clearTimeout(r.windowTimer);
@@ -235,12 +256,12 @@
     const announce = () => api(`/api/reader/sessions/${session}/window`, json('PATCH', { chapter_id: chapter, start, end, revision })).catch(() => { });
     if (immediate) await announce();
     else r.windowTimer = setTimeout(announce, 120);
-    pump(context);
+    pump(context, [start, end]);
   }
 
-  function pump(context) {
+  function pump(context, range = null) {
     if (context.aborted || r.context !== context || !r.chapter) return;
-    const current = visibleRange();
+    const current = range || visibleRange();
     const visible = new Set(Array.from({ length: current[1] - current[0] + 1 }, (_, n) => current[0] + n));
     const wanted = [...context.allowed].sort((a, b) =>
       (visible.has(b) ? 1 : 0) - (visible.has(a) ? 1 : 0) ||
@@ -261,7 +282,7 @@
     context.pending++;
     const controller = state.controller;
     const source = r.chapter.pages[index].url;
-    const slot = () => context.slots.find(n => Number(n.dataset.page) === index);
+    const slot = () => context.slotMap.get(index);
     if (slot()) paint(slot(), state);
     try {
       let width = 0, height = 0, url = '';
@@ -291,7 +312,7 @@
       state.url = url; state.width = width; state.height = height; state.status = 'ready';
       /* 前置占位页拿到真实比例后，保持当前阅读锚点不跳动。 */
       const box = viewport();
-      const anchor = context.slots.find(n => Number(n.dataset.page) === r.page);
+      const anchor = isVertical() && index < r.page ? context.slotMap.get(r.page) : null;
       const before = anchor?.getBoundingClientRect().top;
       if (slot()) paint(slot(), state);
       if (isVertical() && anchor && before != null && index < r.page) {
@@ -315,10 +336,11 @@
 
   function updateVisible() {
     if (!r.active || !r.chapter || !r.context || r.context.restoring) return;
+    const range = visibleRange();
     if (isVertical()) {
-      const [start] = visibleRange();
+      const [start] = range;
       r.page = start;
-      const slot = r.context.slots.find(n => Number(n.dataset.page) === start);
+      const slot = r.context.slotMap.get(start);
       if (slot) {
         const box = viewport().getBoundingClientRect();
         const rect = slot.getBoundingClientRect();
@@ -326,16 +348,17 @@
       }
     }
     syncControls();
-    updateWindow();
+    updateWindow(r.context, false, range);
     scheduleSave();
   }
 
   function positionPage(page, offset = 0) {
     if (!isVertical()) return;
     const box = viewport();
-    const slot = r.context?.slots.find(n => Number(n.dataset.page) === page);
+    const slot = r.context?.slotMap.get(page);
     if (!slot) return;
-    box.scrollTop += slot.getBoundingClientRect().top - box.getBoundingClientRect().top + slot.getBoundingClientRect().height * offset;
+    const rect = slot.getBoundingClientRect();
+    box.scrollTop += rect.top - box.getBoundingClientRect().top + rect.height * offset;
   }
 
   function jump(page, offset = 0, save = true) {
@@ -371,6 +394,10 @@
   function syncControls() {
     const count = r.chapter?.page_count || 0;
     const i = chapterIndex();
+    const marked = r.bookmarks.some(b => b.chapter_id === r.chapter?.id && b.page === r.page);
+    const key = `${count}:${r.page}:${i}:${r.book?.chapters?.length || 0}:${marked}:${Boolean(r.book)}`;
+    if (r.controlsKey === key) return;
+    r.controlsKey = key;
     $('#readerPageChip').textContent = `${count ? r.page + 1 : 0} / ${count || '—'}`;
     const progress = $('#readerProgress');
     progress.max = Math.max(0, count - 1);
@@ -386,7 +413,6 @@
       mini.style.setProperty('--reader-progress', `${Math.max(0, Math.min(100, percent))}%`);
       mini.setAttribute('aria-valuenow', String(Math.round(percent)));
     }
-    const marked = r.bookmarks.some(b => b.chapter_id === r.chapter?.id && b.page === r.page);
     const bookmarkButton = $('#readerBookmarkButton');
     if (bookmarkButton) {
       bookmarkButton.classList.toggle('is-active', marked);
@@ -506,7 +532,10 @@
       r.adapter.onShelfChanged?.();
     } catch (error) {
       if (serial !== r.shelfSerial) return;
-      if (!r.shelf) $('#shelfList').innerHTML = `<div class="empty-state"><strong>书架读取失败</strong><p>${esc(error.message)}</p></div>`;
+      if (!r.shelf) {
+        $('#shelfList').innerHTML = `<div class="empty-state">${r.adapter.mascotArt('retry')}<strong>书架暂时没有打开</strong><p>${esc(error.message)}</p><button class="ghost-btn" id="shelfRetry">重新加载</button></div>`;
+        $('#shelfRetry').onclick = loadShelf;
+      }
       else r.adapter.toast('书架更新失败', error.message, 'error');
     }
   }
@@ -542,6 +571,12 @@
   function renderShelf() {
     if (!r.shelf) return;
     const rows = shelfRows();
+    const empty = {
+      recent: ['reading', '这里还没有内容', '从作品详情开始阅读，进度和书签会保存下来'],
+      favorite: ['collection', '把喜欢的故事留在这里', '在作品详情点收藏，下次就能在这里找到'],
+      bookmarks: ['collection', '还没有书签', '阅读时添加书签，记住想再看的那一页'],
+      local: ['download', '还没有本地作品', '完整的图片下载会自动登记到这里']
+    }[r.shelfFilter] || ['reading', '这里还没有内容', '从作品详情开始阅读'];
     $('#shelfCount').textContent = `${rows.length} 项`;
     $('#shelfList').innerHTML = rows.length ? rows.map(book => {
       const progress = book.mark || book.progress;
@@ -557,7 +592,7 @@
           <button data-shelf-remove="${esc(shelfKey(book))}" aria-label="${shelfRemoveLabel()}">${icon('x')}</button>
         </div>
       </article>`;
-    }).join('') : `<div class="empty-state"><strong>${r.shelfFilter === 'local' ? '还没有已完成的本地作品' : '这里还没有内容'}</strong><p>${r.shelfFilter === 'local' ? '完整的图片下载会自动登记到这里' : '从作品详情开始阅读，进度和书签会保存下来'}</p></div>`;
+    }).join('') : `<div class="empty-state">${r.adapter.mascotArt(empty[0])}<strong>${empty[1]}</strong><p>${empty[2]}</p></div>`;
     shelfBulk?.refresh(rows, r.shelfFilter);
   }
 
@@ -762,8 +797,8 @@
       if (typing || event.ctrlKey || event.altKey || event.metaKey) return;
       if (event.key === 'ArrowRight') { event.preventDefault(); stepPage(r.settings.direction === 'rtl' ? -1 : 1); }
       else if (event.key === 'ArrowLeft') { event.preventDefault(); stepPage(r.settings.direction === 'rtl' ? 1 : -1); }
-      else if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); isVertical() ? viewport().scrollBy({ top: viewport().clientHeight * 0.85, behavior: 'smooth' }) : stepPage(1); }
-      else if (event.key === 'ArrowUp' || event.key === 'PageUp') { event.preventDefault(); isVertical() ? viewport().scrollBy({ top: -viewport().clientHeight * 0.85, behavior: 'smooth' }) : stepPage(-1); }
+      else if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') { event.preventDefault(); isVertical() ? viewport().scrollBy({ top: viewport().clientHeight * 0.85, behavior: reducedMotion() ? 'instant' : 'smooth' }) : stepPage(1); }
+      else if (event.key === 'ArrowUp' || event.key === 'PageUp') { event.preventDefault(); isVertical() ? viewport().scrollBy({ top: -viewport().clientHeight * 0.85, behavior: reducedMotion() ? 'instant' : 'smooth' }) : stepPage(-1); }
       else if (event.key.toLowerCase() === 'f') { event.preventDefault(); setImmersive(!r.immersive); }
       else if (event.key.toLowerCase() === 'o') { event.preventDefault(); $('#readerOptionsButton').click(); }
       else if (event.key.toLowerCase() === 'j') { event.preventDefault(); stepChapter(1); }

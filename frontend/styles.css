@@ -416,7 +416,7 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 15px; heigh
 .detail-info h2 { font-size: 23px; line-height: 1.35; letter-spacing: -.5px; margin: 9px 0 7px; padding-right: 20px; }
 .detail-author { color: var(--text-3); margin: 0; font-size: 11px; }
 .detail-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 17px; }
-.detail-tags span { padding: 5px 8px; border-radius: 8px; background: var(--surface-muted); color: var(--text-2); font-size: 9px; }
+.detail-tags :is(span, button) { padding: 5px 8px; border-radius: 8px; background: var(--surface-muted); color: var(--text-2); font-size: 9px; }
 .detail-stats { display: flex; gap: 22px; margin-top: auto; padding-top: 22px; }
 .detail-stats div { display: flex; flex-direction: column; }
 .detail-stats strong { font-size: 16px; }
@@ -820,7 +820,7 @@ select { min-height: 30px; border-radius: 5px; font-size: 11px; }
 .detail-info { padding: 0; min-height: 0; }
 .detail-info h2 { font-size: 20px; margin: 7px 0 8px; line-height: 1.4; letter-spacing: -.2px; }
 .detail-tags { margin-top: 13px; gap: 5px; }
-.detail-tags span { padding: 4px 7px; border-radius: 4px; font-size: 10px; }
+.detail-tags :is(span, button) { padding: 4px 7px; border-radius: 4px; font-size: 10px; }
 .detail-stats { margin-top: 0; padding-top: 15px; gap: 24px; }
 .detail-actions { margin-top: 17px; flex-wrap: wrap; }
 .detail-actions button { min-height: 34px; font-size: 12px; padding: 7px 11px; }
@@ -833,4 +833,17 @@ select { min-height: 30px; border-radius: 5px; font-size: 11px; }
   .detail-info h2 { font-size: 17px; padding-right: 18px; }
   .detail-actions { gap: 6px; }
   .detail-actions button { padding: 6px 9px; font-size: 11px; }
+}
+
+/* Tags are search shortcuts, with the same compact visual style as before. */
+.detail-tags button {
+  cursor: pointer;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.detail-tags button:is(:active, :focus-visible) { color: var(--accent-2); background: var(--accent-soft); }
+.detail-tags button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (hover: hover) {
+  .detail-tags button:hover { color: var(--accent-2); background: var(--accent-soft); }
 }

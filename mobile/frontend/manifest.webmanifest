@@ -8,19 +8,45 @@
   "scope": "./",
   "id": "jm-download-mobile",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait-primary",
-  "background_color": "#f3f5f2",
-  "theme_color": "#347a5b",
-  "categories": ["books", "utilities"],
+  "background_color": "#f5f5f5",
+  "theme_color": "#f7a51a",
+  "categories": [
+    "books",
+    "utilities"
+  ],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "书架", "url": "./?view=shelf" },
-    { "name": "下载任务", "url": "./?view=queue" }
+    {
+      "name": "书架",
+      "url": "./?view=shelf"
+    },
+    {
+      "name": "下载任务",
+      "url": "./?view=queue"
+    }
   ]
 }

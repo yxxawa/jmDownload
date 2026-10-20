@@ -1,0 +1,32 @@
+/* 橙奈 · startup, launcher and quiet empty-state illustrations share one character. */
+.profile-summary { min-height: 96px; padding: 17px 14px; gap: 14px; }
+.profile-avatar { display: block; width: 58px; height: 58px; flex: 0 0 58px; border-radius: 16px; object-fit: cover; box-shadow: 0 3px 10px #c9791520; }
+.profile-summary strong { font-size: 16px; }
+.profile-summary p { color: var(--text-2); margin-top: 5px; }
+.mascot-empty-art { display: block; width: 144px; height: 144px; max-width: 56vw; object-fit: contain; margin: 0 auto 18px; user-select: none; pointer-events: none; }
+.empty-state:has(> .mascot-empty-art) { padding: 32px 16px; }
+.empty-state:has(> .mascot-empty-art) strong { color: var(--text-2); font-size: 14px; }
+.empty-state:has(> .mascot-empty-art) p { max-width: 270px; margin: 8px auto 0; font-size: 11px; line-height: 1.9; color: var(--text-3); }
+.selection-empty .mascot-empty-art { width: 112px; height: 112px; margin-bottom: 14px; }
+.selection-empty { padding-top: 22px; }
+.result-state > .mascot-empty-art { width: 128px; height: 128px; }
+@media (max-height: 680px) { .mascot-empty-art { width: 116px; height: 116px; margin-bottom: 14px; } .selection-empty .mascot-empty-art { width: 88px; height: 88px; } }
+
+/* Small scene portraits keep the landing page compact; full illustrations appear only in empty states. */
+.quick-strip { gap: 8px; }
+.quick-action { min-height: 66px; gap: 8px; padding: 6px 0; }
+.quick-action-icon, .quick-action-icon.queue { width: 48px; height: 48px; flex: 0 0 48px; }
+.quick-mascot { display: block; width: 48px; height: 48px; object-fit: contain; user-select: none; pointer-events: none; }
+.quick-action-copy { flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; gap: 4px; }
+.quick-action-copy b { font-size: 12px; font-weight: 550; }
+.quick-action-copy small { display: block; max-width: 100%; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.landing-empty { padding: 34px 12px; }
+.landing-empty strong { display: block; font-size: 14px; font-weight: 600; color: var(--text-2); }
+.landing-empty p { margin-top: 9px; font-size: 11px; line-height: 1.8; }
+.landing-empty .mascot-empty-art { width: 144px; height: 144px; margin-bottom: 18px; }
+.reader-message-error { max-width: 360px; overflow-wrap: anywhere; }
+.reader-message-error > span { display: block; line-height: 1.8; }
+.reader-message-error .mascot-empty-art { width: 128px; height: 128px; }
+.empty-state .ghost-btn { margin: 16px auto 0; }
+@media (max-width: 360px) { .quick-action-icon, .quick-action-icon.queue, .quick-mascot { width: 42px; height: 42px; } .quick-action-icon, .quick-action-icon.queue { flex-basis: 42px; } .quick-action-copy b { font-size: 11px; } .quick-action-copy small { font-size: 9px; } }
+@media (max-height: 580px) { .landing-empty { padding-top: 14px; } .landing-empty .mascot-empty-art { width: 100px; height: 100px; margin-bottom: 10px; } }

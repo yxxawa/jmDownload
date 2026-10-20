@@ -10,8 +10,8 @@
     <AssemblyName>JmDownload</AssemblyName>
 
     <ApplicationId>com.jmd.mobile</ApplicationId>
-    <ApplicationVersion>3</ApplicationVersion>
-    <ApplicationDisplayVersion>1.1.1</ApplicationDisplayVersion>
+    <ApplicationVersion>10</ApplicationVersion>
+    <ApplicationDisplayVersion>1.3.5</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
 
     <AndroidUseAapt2>true</AndroidUseAapt2>
@@ -45,8 +45,9 @@
        显式列出每个目录，避免 Windows 上 %(RecursiveDir) 的反斜杠污染资源名。 -->
   <ItemGroup>
     <EmbeddedResource Include="..\frontend\*.*" LogicalName="frontend/%(Filename)%(Extension)" />
+    <!-- 原始头像只供构建图标使用；运行时用 brand-avatar.webp，不重复打包大图源文件。 -->
     <EmbeddedResource Include="..\frontend\icons\*.*"
-                      Exclude="..\frontend\icons\build-icons.mjs;..\frontend\icons\icon.ico"
+                      Exclude="..\frontend\icons\build-icons.mjs;..\frontend\icons\icon.ico;..\frontend\icons\brand-avatar.png;..\frontend\icons\icon.svg"
                       LogicalName="frontend/icons/%(Filename)%(Extension)" />
   </ItemGroup>
 

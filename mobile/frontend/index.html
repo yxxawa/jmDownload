@@ -4,8 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#f3f5f2" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#111713" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f7a51a" />
+  <meta name="theme-color" content="#f7a51a" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#24211c" media="(prefers-color-scheme: dark)" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,14 +14,18 @@
   <meta name="format-detection" content="telephone=no" />
   <title>JM Download</title>
   <link rel="manifest" href="manifest.webmanifest" />
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="icons/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" sizes="180x180" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="reader.css" />
   <link rel="stylesheet" href="bulk.css" />
+  <link rel="stylesheet" href="classic.css" />
+  <link rel="stylesheet" href="brand.css" />
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
     <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M5 17v2h14v-2"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
@@ -74,7 +79,7 @@
       <section class="screen is-active" id="screen-discover" data-screen="discover">
         <header class="app-bar" id="discoverBar">
           <div class="app-bar-copy">
-            <h1>发现<em class="app-bar-mark">JM</em></h1>
+            <h1 class="brand-title">JM Download<em class="app-bar-mark">移动版</em></h1>
           </div>
           <div class="app-bar-actions">
             <button class="icon-btn" id="themeToggle" aria-label="切换主题">
@@ -97,6 +102,12 @@
           </form>
         </header>
 
+        <div class="segmented classic-ranks" id="rankingTabs" role="tablist" aria-label="热门榜单">
+          <button class="is-active" role="tab" aria-selected="true" data-rank="day">今日排行</button>
+          <button role="tab" aria-selected="false" data-rank="week">本周热门</button>
+          <button role="tab" aria-selected="false" data-rank="month">本月精选</button>
+        </div>
+
         <div class="screen-scroll" id="discoverScroll">
           <button class="search-entry" id="searchEntry">
             <svg><use href="#i-search"/></svg><span>搜索标题、作者或作品 ID</span>
@@ -104,12 +115,12 @@
 
           <div class="quick-strip" id="quickStrip" aria-label="快捷操作">
             <button class="quick-action" id="quickShelf" type="button">
-              <span class="quick-action-icon"><svg><use href="#i-book"/></svg></span>
+              <span class="quick-action-icon"><img class="quick-mascot" src="mascot-home.webp" width="48" height="48" alt="" decoding="async"></span>
               <span class="quick-action-copy"><b>继续阅读</b><small id="quickShelfMeta">打开书架</small></span>
               <svg class="quick-action-arrow"><use href="#i-chevron"/></svg>
             </button>
             <button class="quick-action" id="quickQueue" type="button">
-              <span class="quick-action-icon queue"><svg><use href="#i-download"/></svg></span>
+              <span class="quick-action-icon queue"><img class="quick-mascot" src="mascot-download.webp" width="48" height="48" alt="" decoding="async"></span>
               <span class="quick-action-copy"><b>下载任务</b><small id="quickQueueMeta">队列空闲</small></span>
               <svg class="quick-action-arrow"><use href="#i-chevron"/></svg>
             </button>
@@ -152,11 +163,7 @@
               <h2 id="contentTitle">热门榜单</h2>
             </div>
             <div class="section-head-tools">
-              <div class="segmented" id="rankingTabs" role="tablist">
-                <button class="is-active" data-rank="day">今日</button>
-                <button data-rank="week">本周</button>
-                <button data-rank="month">本月</button>
-              </div>
+
               <div class="segmented icon-only" id="layoutPicker" role="group" aria-label="结果布局">
                 <button class="is-active" type="button" data-layout="grid" aria-label="网格视图" aria-pressed="true"><svg><use href="#i-grid"/></svg></button>
                 <button type="button" data-layout="list" aria-label="列表视图" aria-pressed="false"><svg><use href="#i-list"/></svg></button>
@@ -200,7 +207,7 @@
       <!-- ───────────── 任务 ───────────── -->
       <section class="screen" id="screen-queue" data-screen="queue">
         <header class="app-bar">
-          <div class="app-bar-copy"><h1>任务</h1><p id="queueSummary">队列目前为空</p></div>
+          <div class="app-bar-copy"><h1>下载管理</h1><p id="queueSummary">队列目前为空</p></div>
           <div class="app-bar-actions">
             <button class="icon-btn" id="queueRefresh" aria-label="刷新任务"><svg><use href="#i-refresh"/></svg></button>
             <span class="status-pill" id="queueStatePill">空闲</span>
@@ -261,9 +268,13 @@
       <!-- ───────────── 设置 ───────────── -->
       <section class="screen" id="screen-settings" data-screen="settings">
         <header class="app-bar">
-          <div class="app-bar-copy"><h1>设置</h1></div>
+          <div class="app-bar-copy"><h1>我的</h1></div>
         </header>
         <div class="screen-scroll">
+          <div class="profile-summary">
+            <img class="profile-avatar" src="brand-avatar.webp" width="58" height="58" alt="橙奈" />
+            <div><strong>JM Download</strong><p>橙奈陪你，翻开下一页</p></div>
+          </div>
           <section class="group">
             <h2 class="group-title">外观</h2>
             <div class="row">
@@ -324,7 +335,7 @@
             <h2 class="group-title">软件</h2>
             <div class="row">
               <div class="row-copy"><strong>JM Download 手机端</strong></div>
-              <span class="muted" id="appVersion">—</span>
+              <span class="muted" id="appVersion">1.3.5</span>
             </div>
           </section>
           <div class="scroll-tail"></div>
@@ -337,22 +348,24 @@
     </button>
 
     <nav class="tab-bar" id="tabBar" aria-label="主导航">
-      <button class="tab is-active" data-view="discover" aria-label="发现"><svg><use href="#i-compass"/></svg><span>发现</span></button>
+      <button class="tab is-active" data-view="discover" aria-label="首页"><svg><use href="#i-home"/></svg><span>首页</span></button>
       <button class="tab" data-view="shelf" aria-label="书架"><svg><use href="#i-book"/></svg><span>书架</span></button>
-      <button class="tab" data-view="queue" aria-label="任务">
-        <span class="tab-icon-wrap"><svg><use href="#i-download"/></svg><i class="dot-badge" id="queueBadge" hidden></i></span><span>任务</span>
+      <button class="tab" data-view="queue" aria-label="下载">
+        <span class="tab-icon-wrap"><svg><use href="#i-download"/></svg><i class="dot-badge" id="queueBadge" hidden></i></span><span>下载</span>
       </button>
       <button class="tab" data-view="history" aria-label="记录"><svg><use href="#i-clock"/></svg><span>记录</span></button>
-      <button class="tab" data-view="settings" aria-label="设置"><svg><use href="#i-settings"/></svg><span>设置</span></button>
+      <button class="tab" data-view="settings" aria-label="我的"><svg><use href="#i-user"/></svg><span>我的</span></button>
     </nav>
   </div>
 
   <div class="scrim" id="scrim" hidden></div>
 
   <!-- ───────────── 作品详情 ───────────── -->
-  <section class="sheet sheet-tall" id="detailSheet" role="dialog" aria-modal="true" aria-labelledby="detailTitle" hidden>
+  <section class="sheet sheet-tall" id="detailSheet" role="dialog" aria-modal="true" aria-labelledby="detailSheetTitle" hidden>
     <div class="sheet-grip"></div>
+    <header class="sheet-head"><h2 id="detailSheetTitle">作品详情</h2><button class="icon-btn" data-close-sheet aria-label="关闭详情"><svg><use href="#i-x"/></svg></button></header>
     <div id="detailContent" class="sheet-body"></div>
+    <div id="detailActions" class="sheet-foot" hidden></div>
   </section>
 
   <!-- ───────────── 下载清单 ───────────── -->
@@ -367,7 +380,7 @@
     </header>
     <div class="sheet-body">
       <div class="selection-empty" id="selectionEmpty">
-        <div class="empty-illustration"><svg><use href="#i-plus"/></svg></div>
+        <img class="mascot-empty-art" src="mascot-download.webp" width="144" height="144" alt="" decoding="async">
         <strong>还没有选择作品</strong>
         <p>点封面上的「加入」，或批量粘贴 ID</p>
         <button class="ghost-btn" id="emptyBatchButton">批量添加 ID</button>
@@ -502,6 +515,9 @@
     </aside>
     <div class="reader-drawer-scrim" id="readerDrawerScrim" hidden></div>
 
+
+  </section>
+
     <section class="sheet reader-options" id="readerOptions" role="dialog" aria-modal="true" aria-label="阅读设置" hidden>
       <div class="sheet-grip"></div>
       <header class="sheet-head"><h2>阅读设置</h2><button class="icon-btn" id="readerOptionsClose" aria-label="关闭"><svg><use href="#i-x"/></svg></button></header>
@@ -519,7 +535,6 @@
         <button class="primary-btn" id="readerOptionsDone">完成</button>
       </div>
     </section>
-  </section>
 
   <div class="toast-region" id="toastRegion" aria-live="polite"></div>
   <script src="bulk.js" defer></script>
