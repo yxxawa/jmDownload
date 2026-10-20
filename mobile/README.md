@@ -2,7 +2,7 @@
 
 独立的安卓应用：**装到手机上就能用，不需要电脑、不需要任何外部服务**。
 
-[下载 1.3.5 正式版](https://github.com/yxxawa/jmDownload/releases/tag/20261020)：普通手机优先选择 `JMDownload-android-arm64.apk`（22.3 MiB），旧款 32 位设备或 x86_64 模拟器选择 `JMDownload-android.apk`（64.4 MiB）。
+[下载 1.3.5 正式版](https://github.com/yxxawa/jmDownload/releases/tag/20261020)：安卓只发布 `JMDownload-android-arm64.apk`（22.3 MiB），可直接覆盖安装并保留数据。
 
 搜索、作品详情、下载队列、图片还原、ZIP/PDF 导出、书架、书签、阅读进度、在线阅读 —— 全部在手机本地完成，数据存在手机的公共存储里。
 

@@ -45,7 +45,6 @@
 | 常见 Intel / AMD Windows 电脑 | [JMDownload-win-x64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-win-x64.exe) | 63.0 MiB |
 | Windows on ARM64 | [JMDownload-win-arm64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-win-arm64.exe) | 59.2 MiB |
 | 常见 64 位安卓手机，推荐 | [JMDownload-android-arm64.apk](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-android-arm64.apk) | 22.3 MiB |
-| 32 位安卓设备或 x86_64 模拟器 | [JMDownload-android.apk](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-android.apk) | 64.4 MiB |
 
 Windows 为自包含单文件程序，保留 .NET、WPF、WebView2 桥接和图片处理依赖；系统仍需已安装 WebView2 Runtime。两个安卓包共用包名和签名，可覆盖更新并保留数据。
 
