@@ -70,13 +70,13 @@ public partial class MainWindow : Window
         _windowIsDark = dark;
         var highContrast = SystemParameters.HighContrast;
         var background = highContrast ? SystemColors.WindowColor
-            : dark ? Color.FromRgb(17, 23, 19) : Color.FromRgb(245, 246, 244);
+            : dark ? Color.FromRgb(23, 24, 29) : Color.FromRgb(245, 246, 248);
         Background = new SolidColorBrush(background);
         StartupPanel.Background = Background;
         Resources["StartupPrimaryText"] = highContrast ? SystemColors.WindowTextBrush
-            : new SolidColorBrush(dark ? Color.FromRgb(237, 243, 238) : Color.FromRgb(32, 39, 33));
+            : new SolidColorBrush(dark ? Color.FromRgb(240, 239, 243) : Color.FromRgb(38, 39, 45));
         Resources["StartupSecondaryText"] = highContrast ? SystemColors.WindowTextBrush
-            : new SolidColorBrush(dark ? Color.FromRgb(178, 192, 182) : Color.FromRgb(80, 92, 83));
+            : new SolidColorBrush(dark ? Color.FromRgb(181, 180, 191) : Color.FromRgb(101, 103, 114));
         Browser.DefaultBackgroundColor = System.Drawing.Color.FromArgb(255, background.R, background.G, background.B);
 
         var handle = new WindowInteropHelper(this).Handle;
@@ -86,8 +86,8 @@ public partial class MainWindow : Window
         if (OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
         {
             // COLORREF is 0x00BBGGRR; -1 restores Windows defaults in high-contrast mode.
-            var captionColor = highContrast ? -1 : dark ? 0x00191E17 : 0x00F4F6F5;
-            var textColor = highContrast ? -1 : dark ? 0x00EEF3ED : 0x00212720;
+            var captionColor = highContrast ? -1 : dark ? 0x001D1817 : 0x00F8F6F5;
+            var textColor = highContrast ? -1 : dark ? 0x00F3EFF0 : 0x002D2726;
             DwmSetWindowAttribute(handle, DwmCaptionColor, ref captionColor, sizeof(int));
             DwmSetWindowAttribute(handle, DwmTextColor, ref textColor, sizeof(int));
         }
@@ -105,10 +105,10 @@ public partial class MainWindow : Window
         StartupProgress.Visibility = Visibility.Visible;
         StartupPanel.Visibility = Visibility.Visible;
         Browser.Visibility = Visibility.Collapsed;
-        StatusText.Text = "正在启动 C# 原生后端...";
+        StatusText.Text = "正在准备你的阅读空间…";
         DetailText.Text = string.Empty;
         await DisposeBackendAsync();
-        var progress = new Progress<string>(msg => { DetailText.Text = msg; });
+        var progress = new Progress<string>(_ => { });
         try
         {
             _nativeBackend = new NativeBackendServer();
@@ -126,7 +126,7 @@ public partial class MainWindow : Window
 
     private async Task InitializeWebViewAsync(Uri baseUri, string token)
     {
-        StatusText.Text = "正在初始化 WebView2...";
+        StatusText.Text = "正在唤醒阅读界面…";
         var folder = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "JMComicDesktop", "WebView2");
@@ -136,8 +136,8 @@ public partial class MainWindow : Window
         _webViewBridge = new WebViewBridge();
         await _webViewBridge.ConfigureAsync(Browser.CoreWebView2, token, this);
 
-        StatusText.Text = "正在加载工作区...";
-        DetailText.Text = "界面资源已就绪，正在建立本地连接";
+        StatusText.Text = "正在整理书架与下载清单…";
+        DetailText.Text = "马上就好，喜欢的故事正在路上。";
         var navigationReady = new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
         void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs args)
             => navigationReady.TrySetResult(args);

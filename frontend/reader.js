@@ -28,7 +28,7 @@
     r.adapter = adapter;
     initShelfActions();
     bind();
-    try { r.settings = {...defaults, ...await api('/api/reader/settings')}; r.settingsLoaded=true; syncSettings(); adapter.applyTheme(r.settings.theme); }
+    try { r.settings = {...defaults, ...await api('/api/reader/settings')}; r.settingsLoaded=true; syncSettings(); adapter.applyTheme(adapter.themePreference?.() || r.settings.theme); }
     catch { /* Downloader remains usable if reading settings cannot be loaded. */ }
   }
   async function open(albumId, options={}) {
@@ -304,7 +304,7 @@
     const serial=++r.shelfSerial;
     if(!r.shelf) $('#shelfList').innerHTML='<div class="empty-state"><p>正在读取书架…</p></div>';
     try { const data=await api('/api/reader/shelf');if(serial!==r.shelfSerial)return;r.shelf={books:data.books||[],bookmarks:data.bookmarks||[]};renderShelf();r.adapter.onShelfChanged?.(); }
-    catch(e) {if(serial!==r.shelfSerial)return;if(!r.shelf)$('#shelfList').innerHTML=`<div class="empty-state"><strong>书架读取失败</strong><p>${esc(e.message)}</p></div>`;else r.adapter.toast('书架更新失败',e.message,'error');}
+    catch(e) {if(serial!==r.shelfSerial)return;if(!r.shelf)$('#shelfList').innerHTML=`<div class="empty-state"><img class="mascot-art" src="brand/mascot-retry.webp" width="144" height="144" alt=""><strong>书架读取失败</strong><p>${esc(e.message)}</p></div>`;else r.adapter.toast('书架更新失败',e.message,'error');}
   }
 
   let shelfBulk;
@@ -341,8 +341,8 @@
     $('#shelfList').innerHTML=rows.length?rows.map(b=>{
       const progress=b.mark||b.progress, chapter=b.chapters?.find(c=>c.id===progress?.chapter_id);
       const description=progress?`${chapter?.title||'章节'} · 第 ${Number(progress.page)+1} 页`:'尚未阅读';
-      return `<article class="shelf-item"><img class="shelf-cover" src="${r.adapter.coverUrl(b.id)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div class="shelf-copy"><strong>${esc(b.title)}</strong><p>${esc(description)}${b.local?' · 本地可读':''}</p></div><div class="shelf-actions"><button class="shelf-read" data-shelf-open="${esc(b.id)}" ${b.mark?`data-chapter="${esc(b.mark.chapter_id)}" data-page="${b.mark.page}"`:''}>${progress?'继续阅读':'开始阅读'}</button><button data-shelf-favorite="${esc(b.id)}" data-favorite="${b.favorite?'0':'1'}" class="${b.favorite?'is-favorite':''}" title="${b.favorite?'取消收藏':'收藏'}" aria-label="${b.favorite?'取消收藏':'收藏'}"><svg aria-hidden="true"><use href="#i-star"/></svg></button><button data-shelf-remove="${esc(shelfKey(b))}" title="${shelfRemoveLabel()}" aria-label="${shelfRemoveLabel()}">${icon('x')}</button></div></article>`;
-    }).join(''):`<div class="empty-state"><strong>${r.shelfFilter==='local'?'还没有已完成的本地作品':'这里暂时没有内容'}</strong><p>${r.shelfFilter==='local'?'完整的图片下载会自动登记到这里，不把未完成目录当成离线作品。':'从作品详情开始阅读，进度和书签会保存在本机。'}</p></div>`;
+      return `<article class="shelf-item" data-shelf-detail="${esc(b.id)}"><button type="button" class="shelf-cover-button" data-shelf-detail="${esc(b.id)}" aria-label="${esc(b.title)} · 查看详情"><img class="shelf-cover" src="${r.adapter.coverUrl(b.id)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"></button><div class="shelf-copy"><button type="button" class="shelf-title-button" data-shelf-detail="${esc(b.id)}" title="${esc(b.title)}"><strong>${esc(b.title)}</strong></button><p>${esc(description)}${b.local?' · 本地可读':''}</p></div><div class="shelf-actions"><button class="shelf-read" data-shelf-open="${esc(b.id)}" ${b.mark?`data-chapter="${esc(b.mark.chapter_id)}" data-page="${b.mark.page}"`:''}>${progress?'继续阅读':'开始阅读'}</button><button data-shelf-favorite="${esc(b.id)}" data-favorite="${b.favorite?'0':'1'}" class="${b.favorite?'is-favorite':''}" title="${b.favorite?'取消收藏':'收藏'}" aria-label="${b.favorite?'取消收藏':'收藏'}"><svg aria-hidden="true"><use href="#i-star"/></svg></button><button data-shelf-remove="${esc(shelfKey(b))}" title="${shelfRemoveLabel()}" aria-label="${shelfRemoveLabel()}">${icon('x')}</button></div></article>`;
+    }).join(''):`<div class="empty-state"><img class="mascot-art" src="brand/mascot-reading.webp" width="144" height="144" alt=""><strong>${r.shelfFilter==='local'?'还没有已完成的本地作品':'这里暂时没有内容'}</strong><p>${r.shelfFilter==='local'?'完整的图片下载会自动登记到这里，不把未完成目录当成离线作品。':'从作品详情开始阅读，进度和书签会保存在本机。'}</p></div>`;
     shelfBulk?.refresh(rows, r.shelfFilter);
   }
   function bind() {
@@ -370,6 +370,8 @@
     $('#shelfList').onclick=async e=>{
       const openButton=e.target.closest('[data-shelf-open]');if(openButton){open(openButton.dataset.shelfOpen,{chapter:openButton.dataset.chapter,page:openButton.dataset.page==null?undefined:Number(openButton.dataset.page)});return;}
       const favorite=e.target.closest('[data-shelf-favorite]'),remove=e.target.closest('[data-shelf-remove]');
+      const detail=e.target.closest('[data-shelf-detail]');
+      if(detail&&!favorite&&!remove){const id=detail.dataset.shelfDetail;r.adapter.showDetail(id,shelfRows().find(book=>String(book.id)===id));return;}
       try{if(favorite)await api(`/api/reader/favorites/${favorite.dataset.shelfFavorite}`,json('PUT',{favorite:favorite.dataset.favorite==='1'}));else if(remove){const row=shelfRows().find(book=>shelfKey(book)===remove.dataset.shelfRemove);if(row&&await window.JMBulk.confirm(shelfRemoveMessage(1),shelfRemoveLabel()))await removeShelfRows([row]);return;}else return;await loadShelf();}catch(error){r.adapter.toast('书架更新失败',error.message,'error');}
     };
     document.addEventListener('keydown',e=>{

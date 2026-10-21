@@ -2,7 +2,7 @@
 
 **JM Download** 是一款面向 Windows 与 Android 的漫画检索、整理、下载与在线阅读程序。Windows 外壳使用 WPF 与 WebView2，Android 使用原生 WebView 外壳；两端共享 C#/.NET 本地后端。
 
-![应用界面预览](assets/app-preview.png)
+![PC 应用界面预览（演示数据）](assets/desktop-preview.png)
 
 > 本项目为独立第三方工具，与相关内容平台无隶属或官方合作关系。程序不会托管漫画内容；访问、下载或保存内容前，请确认你有权这样做，并遵守所在地法律及相关平台条款。
 
@@ -23,6 +23,7 @@
 - 支持章节目录、上一页/下一页、上一章/下一章、页码跳转和进度滑块。
 - 阅读方向、页面适配、缩放、明暗主题、专注模式与全屏。
 - 书架、收藏、书签、阅读进度和阅读设置持久化保存。
+- PC 书架支持点击作品封面、书名或卡片内容查看详情；“继续阅读”直接回到保存的页码。
 - 按需加载章节；邻近图片预读、图片缓存上限设置、失败页面重试。
 - 阅读器可将已下载完成的本地作品加入本地书架。
 
@@ -38,15 +39,15 @@
 
 ## 下载正式版
 
-当前发布：**20261020**，Windows **1.1.3**，Android **1.3.5**（versionCode 10）。完整说明见 [Release](https://github.com/yxxawa/jmDownload/releases/tag/20261020)。
+当前发布：**20261021**，Windows **1.1.4**，Android **1.3.5**（versionCode 10）。完整说明见 [Release](https://github.com/yxxawa/jmDownload/releases/tag/20261021)。
 
 | 设备 | 安装包 | 大小 |
 | --- | --- | --- |
-| 常见 Intel / AMD Windows 电脑 | [JMDownload-win-x64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-win-x64.exe) | 63.0 MiB |
-| Windows on ARM64 | [JMDownload-win-arm64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-win-arm64.exe) | 59.2 MiB |
-| 常见 64 位安卓手机，推荐 | [JMDownload-android-arm64.apk](https://github.com/yxxawa/jmDownload/releases/download/20261020/JMDownload-android-arm64.apk) | 22.3 MiB |
+| 常见 Intel / AMD Windows 电脑 | [JMDownload-win-x64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261021/JMDownload-win-x64.exe) | 64.0 MiB |
+| Windows on ARM64 | [JMDownload-win-arm64.exe](https://github.com/yxxawa/jmDownload/releases/download/20261021/JMDownload-win-arm64.exe) | 60.2 MiB |
+| 常见 64 位安卓手机，推荐 | [JMDownload-android-arm64.apk](https://github.com/yxxawa/jmDownload/releases/download/20261021/JMDownload-android-arm64.apk) | 22.3 MiB |
 
-Windows 为自包含单文件程序，保留 .NET、WPF、WebView2 桥接和图片处理依赖；系统仍需已安装 WebView2 Runtime。两个安卓包共用包名和签名，可覆盖更新并保留数据。
+Windows 为自包含单文件程序，保留 .NET、WPF、WebView2 桥接和图片处理依赖；系统仍需已安装 WebView2 Runtime。安卓只发布 ARM64 包，沿用原包名和签名，可覆盖更新并保留数据。
 
 ## 获取构建产物
 

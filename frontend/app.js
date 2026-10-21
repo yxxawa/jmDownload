@@ -53,11 +53,12 @@
 
   const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[ch]));
+  const mascotArt = (scene = 'reading') => `<img class="mascot-art" src="brand/mascot-${scene}.webp" width="144" height="144" alt="" decoding="async">`;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || min));
   const statusLabel = status => ({ queued:'等待中', running:'下载中', success:'已完成', completed:'已完成', failed:'异常', cancelled:'已取消', stopping:'正在停止' }[status] || status || '等待中');
   const successStatus = status => status === 'success' || status === 'completed' || status === 'done';
   const finishedStatus = status => successStatus(status) || status === 'failed' || status === 'cancelled';
-  const coverUrl = id => demoMode ? '' : `/api/cover/${encodeURIComponent(id)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  const coverUrl = id => demoMode ? `brand/demo-cover-${(Math.max(0, demoAlbums.findIndex(item => item.id === String(id))) % 8) + 1}.svg` : `/api/cover/${encodeURIComponent(id)}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
   const setText = (target, value) => {
     const node = typeof target === 'string' ? $(target) : target;
     const next = String(value ?? '');
@@ -158,6 +159,13 @@
     }
   }
 
+  function applyMotion(preference = store.get('jm-motion-v1', 'full')) {
+    const motion = preference === 'reduced' ? 'reduced' : 'full';
+    document.documentElement.dataset.motion = motion;
+    $('#motionSelect').value = motion;
+    store.set('jm-motion-v1', motion);
+  }
+
   function toggleTheme() {
     const isDark = document.documentElement.dataset.theme === 'dark';
     applyTheme(isDark ? 'light' : 'dark');
@@ -201,10 +209,13 @@
 
   function openPlanner() {
     $('#planner').classList.add('is-open');
+    $$('#plannerToggleTop, #floatingPlanButton').forEach(button => button.setAttribute('aria-expanded', 'true'));
+    if (matchMedia('(max-width: 1120px)').matches) $('#modalBackdrop').hidden = false;
   }
 
   function closePlanner() {
     $('#planner').classList.remove('is-open');
+    $$('#plannerToggleTop, #floatingPlanButton').forEach(button => button.setAttribute('aria-expanded', 'false'));
     if ($$('.modal:not([hidden])').length === 0) $('#modalBackdrop').hidden = true;
   }
 
@@ -216,7 +227,7 @@
   function showResultState(title, message) {
     $('#albumGrid').innerHTML = '';
     const box = $('#resultState');
-    box.innerHTML = `<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
+    box.innerHTML = `${mascotArt(state.mode === 'search' ? 'search' : 'retry')}<strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p>`;
     box.hidden = false;
     $('#loadMoreWrap').hidden = true;
   }
@@ -302,7 +313,7 @@
       const selected = state.selected.has(String(item.id));
       const src = coverUrl(item.id);
       const eagerCover = index < 16;
-      return `<article class="album-card" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 12) * 28}ms">
+      return `<article class="album-card" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 7) * 18}ms">
         <div class="cover-wrap" data-detail="${escapeHtml(item.id)}">
           <span class="cover-placeholder">J</span>
           ${src ? `<img class="album-cover" src="${src}" alt="" loading="${eagerCover ? 'eager' : 'lazy'}" fetchpriority="${index < 8 ? 'high' : 'auto'}" decoding="async" onerror="this.style.display='none'">` : ''}
@@ -425,10 +436,10 @@
     search(query);
   }
 
-  async function showDetail(id) {
+  async function showDetail(id, shelfItem = null) {
     state.detailController?.abort(); state.detailController=new AbortController();
     const serial=++state.detailSerial, signal=state.detailController.signal;
-    const item=state.items.find(i=>String(i.id)===String(id))||state.selected.get(String(id));
+    const item=shelfItem||state.items.find(i=>String(i.id)===String(id))||state.selected.get(String(id));
     $('#detailContent').innerHTML='<div class="detail-loading"><div class="spinner"></div><p>正在读取作品信息…</p></div>';
     openModal($('#detailModal'));
     try {
@@ -899,7 +910,7 @@
     const list = $('#taskList');
     if (!tasks.length) {
       if (renderCache.taskLayout !== layoutKey) {
-        list.innerHTML = `<div class="empty-state"><strong>队列很安静</strong><p>从“发现”页面选择作品，任务会按顺序出现在这里。</p></div>`;
+        list.innerHTML = `<div class="empty-state">${mascotArt('download')}<strong>队列很安静</strong><p>从“发现”页面选择作品，任务会按顺序出现在这里。</p></div>`;
         renderCache.taskLayout = layoutKey;
       }
       bulkLists.tasks?.refresh(tasks);
@@ -990,7 +1001,7 @@
     renderCache.logs = logKey;
     if (!state.logs.length) {
       bulkLists.logs?.refresh([]);
-      $('#logList').innerHTML = `<div class="empty-state"><strong>暂无活动</strong><p>下载开始后，关键进度和异常会显示在这里。</p></div>`;
+      $('#logList').innerHTML = `<div class="empty-state">${mascotArt('history')}<strong>暂无活动</strong><p>下载开始后，关键进度和异常会显示在这里。</p></div>`;
       return;
     }
     $('#logList').innerHTML = state.logs.map(entry => `<div class="log-entry ${String(entry.level).toLowerCase()}"><i class="log-dot"></i><div><p>${escapeHtml(entry.message)}</p><time>${formatTime(entry.time)}${entry.item_id ? ` · JM ${escapeHtml(entry.item_id)}` : ''}</time></div></div>`).join('');
@@ -1037,7 +1048,7 @@
     renderCache.history = historyKey;
     if (!items.length) {
       bulkLists.history?.refresh([], state.historyFilter);
-      $('#historyList').innerHTML = `<div class="empty-state"><strong>${state.history.length ? '这个筛选下没有记录' : '还没有下载记录'}</strong><p>${state.history.length ? '切换到“全部”查看其他任务。' : '完成第一次下载后，这里会帮你记住作品和目录。'}</p></div>`;
+      $('#historyList').innerHTML = `<div class="empty-state">${mascotArt('history')}<strong>${state.history.length ? '这个筛选下没有记录' : '还没有下载记录'}</strong><p>${state.history.length ? '切换到“全部”查看其他任务。' : '完成第一次下载后，这里会帮你记住作品和目录。'}</p></div>`;
       return;
     }
     $('#historyList').innerHTML = items.map(item => {
@@ -1109,6 +1120,7 @@
     $$('.nav-item[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
     $('#themeToggle').addEventListener('click', toggleTheme);
     $('#themeSelect').addEventListener('change', event => applyTheme(event.target.value));
+    $('#motionSelect').addEventListener('change', event => applyMotion(event.target.value));
     $('#settingsButton').addEventListener('click', () => openModal($('#settingsModal')));
     $('#searchForm').addEventListener('submit', event => { event.preventDefault(); search($('#searchInput').value); });
     $('#refreshButton').addEventListener('click', async () => {
@@ -1206,12 +1218,17 @@
       if (event.ctrlKey && event.key.toLowerCase() === 'k') { event.preventDefault(); showView('discover'); $('#searchInput').focus(); $('#searchInput').select(); }
       if (event.ctrlKey && event.key === 'Enter') { event.preventDefault(); startDownload(); }
     });
+    matchMedia('(max-width: 1120px)').addEventListener?.('change', event => {
+      const hasModal = $$('.modal:not([hidden])').length > 0;
+      $('#modalBackdrop').hidden = !hasModal && !(event.matches && $('#planner').classList.contains('is-open'));
+    });
     matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (store.get('jm-theme-v2', 'system') === 'system') applyTheme('system'); });
   }
 
   async function init() {
     initCollectionActions();
     applyTheme();
+    applyMotion();
     syncLayout();
     bindEvents();
     syncSearchControls();
@@ -1222,8 +1239,8 @@
     setConnection('', '正在连接');
     // Realtime task status is local; never wait for a remote ranking to connect it.
     connectWebSocket();
-    const readerReady = window.JMReader.init({api,icon,escapeHtml,toast,coverUrl,token,desktopMode,bridgeCall,applyTheme,toggleTheme,
-      closeModals,closePlanner,showView,onShelfChanged:refreshFavoriteState,currentView:()=>state.view,
+    const readerReady = window.JMReader.init({api,icon,escapeHtml,toast,coverUrl,token,desktopMode,bridgeCall,applyTheme,toggleTheme,themePreference:()=>store.get('jm-theme-v2','system'),
+      closeModals,closePlanner,showView,showDetail,onShelfChanged:refreshFavoriteState,currentView:()=>state.view,
       addDownload:book=>{const id=String(book.id);if(!state.selected.has(id))state.selected.set(id,{id,title:book.title});renderSelection();syncAlbumSelection(id);}});
     loadRanking('day');
     await Promise.all([loadConfig(), loadTasks(), readerReady, refreshFavoriteState()]);

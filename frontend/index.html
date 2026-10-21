@@ -5,9 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="light dark" />
   <title>JM Download</title>
+  <script>
+    try {
+      const theme = JSON.parse(localStorage.getItem('jm-theme-v2') || '"system"');
+      document.documentElement.dataset.theme = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      document.documentElement.dataset.motion = JSON.parse(localStorage.getItem('jm-motion-v1') || '"full"');
+    } catch {}
+  </script>
+  <link rel="icon" href="brand/brand-avatar.webp" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="stylesheet" href="reader.css" />
   <link rel="stylesheet" href="bulk.css" />
+  <link rel="stylesheet" href="desktop.css" />
 </head>
 <body>
   <svg class="svg-sprite" aria-hidden="true">
@@ -54,27 +63,28 @@
   <div class="app-shell">
     <aside class="sidebar" aria-label="主导航">
       <div class="brand" title="JM Download">
-        <div class="brand-mark"><span>J</span></div>
-        <div class="brand-copy"><strong>JM Download</strong><small>漫画整理工具</small></div>
+        <div class="brand-mark"><img src="brand/brand-avatar.webp" width="44" height="44" alt="" /></div>
+        <div class="brand-copy"><strong>JM Download</strong></div>
       </div>
 
-      <nav class="main-nav">
+      <nav class="main-nav" aria-label="工作区">
+        <span class="nav-caption">我的空间</span>
         <button class="nav-item is-active" data-view="discover" aria-current="page" aria-label="发现" title="发现">
-          <svg><use href="#i-compass"/></svg><span>发现</span>
+          <svg><use href="#i-compass"/></svg><span>发现作品</span>
         </button>
-        <button class="nav-item" data-view="shelf" aria-label="书架" title="书架"><svg><use href="#i-book"/></svg><span>书架</span></button>
+        <button class="nav-item" data-view="shelf" aria-label="书架" title="书架"><svg><use href="#i-book"/></svg><span>我的书架</span></button>
         <button class="nav-item" data-view="queue" aria-label="任务" title="任务">
-          <span class="nav-icon-wrap"><svg><use href="#i-download"/></svg><i id="queueBadge" hidden></i></span><span>任务</span>
+          <span class="nav-icon-wrap"><svg><use href="#i-download"/></svg><i id="queueBadge" hidden></i></span><span>下载任务</span>
         </button>
         <button class="nav-item" data-view="history" aria-label="记录" title="记录">
-          <svg><use href="#i-clock"/></svg><span>记录</span>
+          <svg><use href="#i-clock"/></svg><span>下载记录</span>
         </button>
       </nav>
 
       <div class="sidebar-bottom">
         <div class="connection-card" id="connectionCard">
           <span class="connection-dot"></span>
-          <div><strong id="connectionText">正在连接</strong><small>C# 原生服务</small></div>
+          <div><strong id="connectionText">正在连接</strong><small>阅读与下载，随时就绪</small></div>
         </div>
         <button class="nav-item" id="settingsButton" aria-label="偏好设置" title="偏好设置">
           <svg><use href="#i-settings"/></svg><span>偏好设置</span>
@@ -91,10 +101,11 @@
       <section class="view is-active" id="view-discover">
         <header class="page-header discover-header">
           <div>
-            <h1>发现作品</h1>
-            <p>浏览榜单，或输入标题、作者、作品 ID。</p>
+            <span class="page-overline">发现 / EXPLORE</span>
+            <h1>今天，想看点什么？</h1>
+            <p>从一本喜欢的作品，开始一段好时光。</p>
           </div>
-          <button class="icon-button planner-toggle" id="plannerToggleTop" title="打开下载清单" aria-label="打开下载清单">
+          <button class="icon-button planner-toggle" id="plannerToggleTop" aria-controls="planner" aria-expanded="false" title="打开下载清单" aria-label="打开下载清单">
             <svg><use href="#i-list"/></svg><span id="plannerToggleCount">0</span>
           </button>
         </header>
@@ -215,12 +226,12 @@
 
     <aside class="planner" id="planner" aria-label="下载清单">
       <div class="planner-head">
-        <div><h2>下载清单 <em id="selectedCount">0</em></h2></div>
+        <div><span class="page-overline">待下载 / COLLECTION</span><h2>下载清单 <em id="selectedCount">0</em></h2></div>
         <div class="planner-head-actions"><button class="text-button" id="clearSelectedButton">清空</button><button class="icon-button planner-close" id="plannerClose" aria-label="关闭下载清单" title="关闭下载清单"><svg><use href="#i-x"/></svg></button></div>
       </div>
 
       <div class="selection-empty" id="selectionEmpty">
-        <div class="empty-illustration"><svg><use href="#i-plus"/></svg></div>
+        <img class="mascot-art selection-art" src="brand/mascot-collection.webp" width="120" height="120" alt="" />
         <strong>还没有选择作品</strong>
         <p>在榜单或搜索结果中点击“加入”，也可以批量粘贴 ID。</p>
         <button class="secondary-button small" id="emptyBatchButton">批量添加 ID</button>
@@ -303,7 +314,7 @@
     </div>
   </section>
 
-  <button class="floating-plan-button" id="floatingPlanButton"><svg><use href="#i-download"/></svg><span>下载清单</span><em id="floatingPlanCount">0</em></button>
+  <button class="floating-plan-button" id="floatingPlanButton" aria-controls="planner" aria-expanded="false"><svg><use href="#i-download"/></svg><span>下载清单</span><em id="floatingPlanCount">0</em></button>
 
   <div class="modal-backdrop" id="modalBackdrop" hidden></div>
 
@@ -325,9 +336,11 @@
     <div class="modal-heading"><span class="modal-icon"><svg><use href="#i-settings"/></svg></span><div><h2 id="settingsTitle">偏好设置</h2><p>调整外观和文件命名方式，修改会自动保存。</p></div></div>
     <div class="preferences-grid">
       <div class="preference-row"><div><strong>界面主题</strong><p>跟随系统或固定明暗主题</p></div><select id="themeSelect"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
+      <div class="preference-row"><div><strong>界面动效</strong><p>轻盈过渡，或减少动画以保持专注</p></div><select id="motionSelect" aria-label="界面动效"><option value="full">完整动效</option><option value="reduced">减少动效</option></select></div>
       <div class="preference-row"><div><strong>文件名语言</strong><p>影响保存后的目录和文件名称</p></div><select id="filenameLangInput"><option value="traditional">繁体中文</option><option value="simplified">简体中文</option></select></div>
       <div class="preference-row"><div><strong>章节并发</strong><p>单个作品内同时处理的章节数</p></div><select id="photoThreadsInput"><option value="1">1（稳定）</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5（更快）</option></select></div>
     </div>
+    <div class="app-version"><img src="brand/brand-avatar.webp" width="32" height="32" alt="" /><span>JM Download <b>1.1.4</b><small>把喜欢的故事，留在身边。</small></span></div>
     <div class="modal-note"><svg><use href="#i-info"/></svg><p>较高并发会占用更多网络和磁盘资源。默认配置更适合长时间批量下载。</p></div>
     <div class="modal-actions"><span class="save-state"><span></span>自动保存已开启</span><button class="primary-button" data-close-modal>完成</button></div>
   </section>
