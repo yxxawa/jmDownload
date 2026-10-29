@@ -139,13 +139,13 @@ kbd { border: 1px solid var(--line); background: var(--bg-soft); padding: 3px 5p
 .album-card:hover .cover-wrap { transform: translateY(-3px); box-shadow: 0 9px 18px #161a2518; }
 .album-card:active .cover-wrap { transform: translateY(-1px); }
 .cover-placeholder { color: var(--line-strong); background: var(--surface-muted); font-weight: 550; }
-.cover-wrap::after { height: 35%; background: linear-gradient(transparent,#17162170); }
+.cover-wrap::after { content: none; }
 .rank-badge, .rank-badge.top { top: 8px; left: 8px; height: 24px; min-width: 25px; padding: 0 7px; display: grid; place-items: center; background: #22212bcc; color: #fff; font-size: 10px; border-radius: 5px; }
 .rank-badge.top { background: var(--accent-fill); color: var(--accent-on); }
-.card-select { width: 30px; height: 30px; top: auto; bottom: 8px; right: 8px; border: 1px solid #ffffff70; border-radius: 7px; color: #fff; background: #29253080; opacity: 1; }
+.card-select { width: 30px; height: 30px; top: auto; bottom: 8px; right: 8px; border: 1px solid #ffffffb3; border-radius: 7px; color: #39343d; background: #fffffff0; opacity: 1; }
 .card-select.is-selected { color: var(--accent-on); border-color: var(--accent-fill); background: var(--accent-fill); }
 .card-select:hover { background: var(--accent-fill); color: var(--accent-on); border-color: var(--accent-fill); }
-.cover-id { font-size: 9px; bottom: 11px; left: 10px; color: #ffffffe6; }
+.cover-id { font-size: 9px; line-height: 1.4; bottom: 10px; left: 8px; padding: 3px 6px; border-radius: 4px; color: #39343d; background: #fffffff0; }
 .card-body { padding: 9px 1px 0; }
 .card-title { min-height: 37px; font-size: 12px; line-height: 1.55; color: var(--text); font-weight: 550; }
 .card-title:hover { color: var(--accent); }

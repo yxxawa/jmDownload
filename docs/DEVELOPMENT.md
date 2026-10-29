@@ -35,3 +35,12 @@ DesktopShell.exe --selfcheck <report.json>
 ```
 
 自检应只验证内嵌静态文件、阅读器初始化和本地鉴权等；它不代表上游搜索/下载服务此刻可用，也不替代 Windows 桌面上的人工启动检查。在线阅读/下载功能验证可能产生上游请求，运行前应确认访问权限和站点条款。
+## 更新已有 Windows Release
+
+手动触发 `Windows build` 工作流并填写已有的 `release_tag`，例如：
+
+```powershell
+gh workflow run windows-build.yml --repo yxxawa/jmDownload --ref main -f release_tag=20261021
+```
+
+留空时仅构建 Actions 产物。填写标签时，工作流要求对应 Release 已存在，待 x64／ARM64 构建及 x64 自检全部成功，再替换同名 Windows EXE、向前推进原标签，并使用 `docs/releases/<tag>.md` 更新说明。目标提交必须包含原标签的历史；工作流不会创建 Release。安卓附件不参与这一步。

@@ -26,11 +26,27 @@ public partial class App : Application
             if ((int)denied.StatusCode != 401) throw new InvalidOperationException("Reader authentication check failed");
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
             var assets = new Dictionary<string, int>();
-            foreach (var path in new[] {"index.html", "app.js", "reader.js", "reader.css", "bulk.js", "bulk.css"})
+            var assetPaths = new[]
             {
-                var text = await http.GetStringAsync(new Uri(server.BaseUri, path));
-                if (text.Length < 500) throw new InvalidOperationException("Embedded asset missing: " + path);
-                assets[path] = text.Length;
+                "index.html", "app.js", "styles.css", "desktop.css", "reader.js", "reader.css", "bulk.js", "bulk.css",
+                "brand/brand-avatar.webp", "brand/mascot-collection.webp", "brand/mascot-download.webp",
+                "brand/mascot-history.webp", "brand/mascot-home.webp", "brand/mascot-reading.webp",
+                "brand/mascot-retry.webp", "brand/mascot-search.webp", "brand/mascot-welcome.webp",
+            }.Concat(Enumerable.Range(1, 8).Select(index => $"brand/demo-cover-{index}.svg"));
+            foreach (var path in assetPaths)
+            {
+                using var response = await http.GetAsync(new Uri(server.BaseUri, path));
+                if (!response.IsSuccessStatusCode) throw new InvalidOperationException($"Embedded asset missing: {path} ({(int)response.StatusCode})");
+                var bytes = await response.Content.ReadAsByteArrayAsync();
+                if (bytes.Length < 500) throw new InvalidOperationException("Embedded asset empty or truncated: " + path);
+                var expectedType = Path.GetExtension(path) switch
+                {
+                    ".html" => "text/html", ".js" => "text/javascript", ".css" => "text/css",
+                    ".webp" => "image/webp", ".svg" => "image/svg+xml", _ => throw new InvalidOperationException("Unknown asset type: " + path),
+                };
+                if (response.Content.Headers.ContentType?.MediaType != expectedType) throw new InvalidOperationException("Embedded asset content type mismatch: " + path);
+                if (path.EndsWith(".webp", StringComparison.Ordinal) && !JmImageDecoder.IsUsableBytes(bytes, ".webp")) throw new InvalidOperationException("Embedded image cannot be decoded: " + path);
+                assets[path] = bytes.Length;
             }
             using var settings = JsonDocument.Parse(await http.GetStringAsync(new Uri(server.BaseUri, "api/reader/settings")));
             using var shelf = JsonDocument.Parse(await http.GetStringAsync(new Uri(server.BaseUri, "api/reader/shelf")));

@@ -5,6 +5,12 @@ on:
     branches: [ main, master ]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to refresh (leave empty for build artifacts only)
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -46,3 +52,59 @@ jobs:
           name: JMDownload-${{ matrix.rid }}
           path: artifacts/publish/${{ matrix.rid }}/DesktopShell.exe
           if-no-files-found: error
+  update-release:
+    name: Update existing Windows release
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    needs: publish
+    runs-on: windows-latest
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: update-windows-release-${{ inputs.release_tag }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v7.0.1
+
+      - name: Download Windows executables
+        uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: JMDownload-win-*
+          path: artifacts/release
+
+      - name: Refresh assets and source on the existing release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (${env:RELEASE_TAG} -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Unsupported release tag.' }
+          gh release view ${env:RELEASE_TAG} --repo ${env:GITHUB_REPOSITORY} --json tagName | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'The target release must already exist.' }
+          $comparison = gh api "repos/${env:GITHUB_REPOSITORY}/compare/${env:RELEASE_TAG}...${env:GITHUB_SHA}" --jq .status
+          if ($LASTEXITCODE -ne 0 -or $comparison -notin @('ahead', 'identical')) { throw 'Release source must advance from its current tag.' }
+
+          $assetPaths = foreach ($rid in @('win-x64', 'win-arm64')) {
+            $source = Join-Path $env:GITHUB_WORKSPACE "artifacts/release/JMDownload-$rid/DesktopShell.exe"
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or (Get-Item -LiteralPath $source).Length -eq 0) { throw "Missing executable: $rid" }
+            $asset = Join-Path $env:RUNNER_TEMP "JMDownload-$rid.exe"
+            Copy-Item -LiteralPath $source -Destination $asset
+            $asset
+          }
+          gh release upload ${env:RELEASE_TAG} @assetPaths --repo ${env:GITHUB_REPOSITORY} --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to replace the Windows release assets.' }
+
+          gh api --method PATCH "repos/${env:GITHUB_REPOSITORY}/git/refs/tags/${env:RELEASE_TAG}" --raw-field "sha=${env:GITHUB_SHA}" --field force=false | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to advance the existing source tag.' }
+          $notesPath = Join-Path $env:GITHUB_WORKSPACE "docs/releases/${env:RELEASE_TAG}.md"
+          $editArgs = @('release', 'edit', ${env:RELEASE_TAG}, '--repo', ${env:GITHUB_REPOSITORY}, '--target', ${env:GITHUB_SHA}, '--verify-tag')
+          if (Test-Path -LiteralPath $notesPath -PathType Leaf) {
+            $notes = (Get-Content -LiteralPath $notesPath -Raw -Encoding utf8) -replace '\A# [^\r\n]+\r?\n\s*', ''
+            $notesFile = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+            Set-Content -LiteralPath $notesFile -Value $notes -Encoding utf8
+            $editArgs += @('--notes-file', $notesFile)
+          }
+          gh @editArgs
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to update the existing release description.' }

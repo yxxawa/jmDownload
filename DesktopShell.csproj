@@ -61,8 +61,9 @@
   <ItemGroup>
     <Resource Include="assets\desktop-brand\*.png" />
     <EmbeddedResource Include="docs\THIRD_PARTY_NOTICES.txt" LogicalName="THIRD_PARTY_NOTICES.txt" />
+    <!-- Match URL paths on Windows too: RecursiveDir uses backslashes there. -->
     <EmbeddedResource Include="frontend\**\*.*"
-                      LogicalName="frontend/%(RecursiveDir)%(Filename)%(Extension)" />
+                      LogicalName="$([System.String]::Copy('frontend/%(RecursiveDir)%(Filename)%(Extension)').Replace('\', '/'))" />
   </ItemGroup>
 
   <!-- NuGet may ship native .pdb files even when DebugSymbols=false.
